@@ -41,6 +41,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.tihloh.pos.data.PosRepository
 import com.tihloh.pos.data.ProductEntity
+import com.tihloh.pos.product.ProductLookupOutcome
 import com.tihloh.pos.product.ProductLookupService
 import com.tihloh.pos.ui.NetworkImage
 import com.tihloh.pos.ui.money
@@ -79,28 +80,42 @@ fun ProductsScreen(
     var editor by remember { mutableStateOf<ProductDraft?>(null) }
     var loadingLookup by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var lookupStatus by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(pendingBarcode) {
         val barcode = pendingBarcode ?: return@LaunchedEffect
         onPendingBarcodeHandled()
         loadingLookup = true
         error = null
+        lookupStatus = null
         try {
             val existing = repository.findByBarcode(barcode)
             if (existing != null) {
                 editor = existing.toDraft()
+                lookupStatus = "Product already exists locally."
             } else {
-                val found = lookup.lookup(barcode)
-                editor = ProductDraft(
-                    barcode = barcode,
-                    name = found?.name.orEmpty(),
-                    description = found?.description.orEmpty(),
-                    brand = found?.brand.orEmpty(),
-                    category = found?.category.orEmpty(),
-                    imageUrl = found?.imageUrl.orEmpty()
-                )
-                if (found == null) {
-                    error = "Barcode not found online. Enter the product details manually."
+                when (val outcome = lookup.lookup(barcode)) {
+                    is ProductLookupOutcome.Found -> {
+                        val found = outcome.product
+                        editor = ProductDraft(
+                            barcode = found.barcode,
+                            name = found.name,
+                            description = found.description.orEmpty(),
+                            brand = found.brand.orEmpty(),
+                            category = found.category.orEmpty(),
+                            imageUrl = found.imageUrl.orEmpty()
+                        )
+                        lookupStatus = "Loaded from " + found.source +
+                            (found.quantity?.let { " · " + it } ?: "")
+                    }
+                    is ProductLookupOutcome.NotFound -> {
+                        editor = ProductDraft(barcode = barcode)
+                        error = "Barcode is valid, but it is not in the Open Facts databases yet."
+                    }
+                    is ProductLookupOutcome.Failed -> {
+                        editor = ProductDraft(barcode = barcode)
+                        error = outcome.message
+                    }
                 }
             }
         } finally {
@@ -137,6 +152,7 @@ fun ProductsScreen(
             modifier = Modifier.fillMaxWidth()
         )
 
+        lookupStatus?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         if (loadingLookup) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
