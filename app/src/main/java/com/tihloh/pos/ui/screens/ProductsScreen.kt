@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import com.tihloh.pos.data.PosRepository
 import com.tihloh.pos.data.ProductEntity
 import com.tihloh.pos.product.ProductLookupService
+import com.tihloh.pos.ui.NetworkImage
 import com.tihloh.pos.ui.money
 import com.tihloh.pos.ui.parseMoneyToCents
 import com.tihloh.pos.ui.quantity
@@ -301,8 +302,11 @@ private fun ProductEditorDialog(
                 }
                 if (draft.imageUrl.isNotBlank()) {
                     item {
-                        Text("Image found from product database", style = MaterialTheme.typography.labelMedium)
-                        Text(draft.imageUrl, style = MaterialTheme.typography.bodySmall)
+                        Text("Product image", style = MaterialTheme.typography.labelMedium)
+                        NetworkImage(
+                            url = draft.imageUrl,
+                            modifier = Modifier.fillMaxWidth().height(160.dp)
+                        )
                     }
                 }
             }
