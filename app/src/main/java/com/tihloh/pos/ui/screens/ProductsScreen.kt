@@ -84,7 +84,6 @@ fun ProductsScreen(
 
     LaunchedEffect(pendingBarcode) {
         val barcode = pendingBarcode ?: return@LaunchedEffect
-        onPendingBarcodeHandled()
         loadingLookup = true
         error = null
         lookupStatus = null
@@ -120,6 +119,7 @@ fun ProductsScreen(
             }
         } finally {
             loadingLookup = false
+            onPendingBarcodeHandled()
         }
     }
 
