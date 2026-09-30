@@ -2,10 +2,9 @@ package com.tihloh.pos.ui
 
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.foundation.layout.Arrangement
+import android.widget.Toast
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,8 +34,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,10 +47,20 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.tihloh.pos.data.AppDatabase
+import com.tihloh.pos.data.PosRepository
+import com.tihloh.pos.data.ProductEntity
 import com.tihloh.pos.scanner.BarcodeScannerView
 import com.tihloh.pos.security.PinStore
+import com.tihloh.pos.ui.screens.CartLine
+import com.tihloh.pos.ui.screens.InventoryScreen
+import com.tihloh.pos.ui.screens.MoreScreen
+import com.tihloh.pos.ui.screens.PosScreen
+import com.tihloh.pos.ui.screens.ProductsScreen
+import com.tihloh.pos.ui.screens.SalesScreen
 import com.tihloh.pos.update.UpdateChecker
 import com.tihloh.pos.update.UpdateInfo
+import kotlinx.coroutines.launch
 
 private enum class MainScreen(val title: String, val icon: ImageVector) {
     POS("POS", Icons.Default.PointOfSale),
@@ -170,22 +181,69 @@ private fun CenteredPanel(title: String, content: @Composable () -> Unit) {
 
 @Composable
 private fun MainShell() {
+    val context = LocalContext.current
+    val repository = remember {
+        PosRepository(AppDatabase.get(context.applicationContext))
+    }
+    val checker = remember { UpdateChecker(context.applicationContext) }
+    val scope = rememberCoroutineScope()
+    val cart = remember { mutableStateListOf<CartLine>() }
+
     var screen by rememberSaveable { mutableStateOf(MainScreen.POS) }
     var scannerMode by remember { mutableStateOf<ScannerMode?>(null) }
-    var lastScan by rememberSaveable { mutableStateOf<String?>(null) }
     var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
-    val context = LocalContext.current
-    val checker = remember { UpdateChecker(context.applicationContext) }
+    var posScannedProduct by remember { mutableStateOf<ProductEntity?>(null) }
+    var inventoryScannedProduct by remember { mutableStateOf<ProductEntity?>(null) }
+    var pendingProductBarcode by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         updateInfo = checker.check()
     }
 
     if (scannerMode != null) {
+        val activeMode = scannerMode
         BarcodeScannerView(
             onScanned = { code ->
-                lastScan = code
                 scannerMode = null
+                scope.launch {
+                    when (activeMode) {
+                        ScannerMode.POS -> {
+                            val product = repository.findByBarcode(code)
+                            if (product != null) {
+                                posScannedProduct = product
+                                screen = MainScreen.POS
+                            } else {
+                                pendingProductBarcode = code
+                                screen = MainScreen.PRODUCTS
+                                Toast.makeText(
+                                    context,
+                                    "New barcode. Add product details first.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                        ScannerMode.INVENTORY -> {
+                            val product = repository.findByBarcode(code)
+                            if (product != null) {
+                                inventoryScannedProduct = product
+                                screen = MainScreen.INVENTORY
+                            } else {
+                                pendingProductBarcode = code
+                                screen = MainScreen.PRODUCTS
+                                Toast.makeText(
+                                    context,
+                                    "Product not found. Add it first.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                        ScannerMode.PRODUCT -> {
+                            pendingProductBarcode = code
+                            screen = MainScreen.PRODUCTS
+                        }
+                        null -> Unit
+                    }
+                }
             },
             onBack = { scannerMode = null }
         )
@@ -231,7 +289,7 @@ private fun MainShell() {
             }
         },
         floatingActionButton = {
-            if (screen != MainScreen.SALES && screen != MainScreen.MORE) {
+            if (screen == MainScreen.POS || screen == MainScreen.INVENTORY || screen == MainScreen.PRODUCTS) {
                 FloatingActionButton(onClick = {
                     scannerMode = when (screen) {
                         MainScreen.POS -> ScannerMode.POS
@@ -245,94 +303,32 @@ private fun MainShell() {
             }
         }
     ) { padding ->
-        when (screen) {
-            MainScreen.POS -> PosScreen(padding, lastScan)
-            MainScreen.SALES -> SalesScreen(padding)
-            MainScreen.INVENTORY -> InventoryScreen(padding, lastScan)
-            MainScreen.PRODUCTS -> ProductsScreen(padding, lastScan)
-            MainScreen.MORE -> MoreScreen(padding) {
-                updateInfo = checker.check(force = true)
+        Box(Modifier.padding(padding)) {
+            when (screen) {
+                MainScreen.POS -> PosScreen(
+                    repository = repository,
+                    cart = cart,
+                    scannedProduct = posScannedProduct,
+                    onScannedProductHandled = { posScannedProduct = null }
+                )
+                MainScreen.SALES -> SalesScreen(repository)
+                MainScreen.INVENTORY -> InventoryScreen(
+                    repository = repository,
+                    scannedProduct = inventoryScannedProduct,
+                    onScannedProductHandled = { inventoryScannedProduct = null }
+                )
+                MainScreen.PRODUCTS -> ProductsScreen(
+                    repository = repository,
+                    pendingBarcode = pendingProductBarcode,
+                    onPendingBarcodeHandled = { pendingProductBarcode = null }
+                )
+                MainScreen.MORE -> MoreScreen(
+                    repository = repository,
+                    checkUpdate = {
+                        updateInfo = checker.check(force = true)
+                    }
+                )
             }
-        }
-    }
-}
-
-@Composable
-private fun PosScreen(padding: PaddingValues, lastScan: String?) {
-    SimpleScreen(padding, "POS") {
-        Text("Scan an item, set quantity, add it to cart, then checkout.")
-        StatusCard("Last scanned", lastScan ?: "No item scanned yet")
-        StatusCard("Cart", "Cart engine and payment flow are the next implementation step.")
-    }
-}
-
-@Composable
-private fun SalesScreen(padding: PaddingValues) {
-    SimpleScreen(padding, "Sales") {
-        Text("Latest receipts will appear first. Tap a sale to view and reprint its receipt.")
-    }
-}
-
-@Composable
-private fun InventoryScreen(padding: PaddingValues, lastScan: String?) {
-    SimpleScreen(padding, "Inventory") {
-        Text("Scanner-first stock receiving, counting and adjustment.")
-        StatusCard("Last scanned", lastScan ?: "Scan a product to update stock")
-        StatusCard("Inventory model", "Ledger-based: stock in/out/adjustments are recorded instead of silently overwriting quantity.")
-    }
-}
-
-@Composable
-private fun ProductsScreen(padding: PaddingValues, lastScan: String?) {
-    SimpleScreen(padding, "Products") {
-        Text("Goods and non-goods are supported. Unknown barcodes can be looked up using Open Food Facts and Open Products Facts.")
-        StatusCard("Last scanned", lastScan ?: "Scan to find or add a product")
-    }
-}
-
-@Composable
-private fun MoreScreen(padding: PaddingValues, checkUpdate: suspend () -> Unit) {
-    var checking by remember { mutableStateOf(false) }
-    SimpleScreen(padding, "More") {
-        StatusCard("Suppliers", "Supplier management and stock receiving")
-        StatusCard("Inventory periods", "Daily, weekly, monthly or custom periods")
-        StatusCard("Printers", "ESC/POS Bluetooth, USB and LAN/TCP")
-        StatusCard("Security", "PIN + biometric/device credential")
-        Button(
-            onClick = { checking = true },
-            enabled = !checking
-        ) { Text(if (checking) "Checking…" else "Check for update") }
-        if (checking) {
-            LaunchedEffect(Unit) {
-                checkUpdate()
-                checking = false
-            }
-        }
-    }
-}
-
-@Composable
-private fun SimpleScreen(
-    padding: PaddingValues,
-    title: String,
-    content: @Composable () -> Unit
-) {
-    Column(
-        Modifier.fillMaxSize().padding(padding).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text(title, style = MaterialTheme.typography.headlineMedium)
-        content()
-    }
-}
-
-@Composable
-private fun StatusCard(title: String, value: String) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(4.dp))
-            Text(value)
         }
     }
 }

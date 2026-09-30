@@ -2,8 +2,8 @@ package com.tihloh.pos.data
 
 import androidx.room.Dao
 import androidx.room.Insert
-import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -11,14 +11,26 @@ interface ProductDao {
     @Query("SELECT * FROM ProductEntity WHERE active = 1 ORDER BY name")
     fun observeAll(): Flow<List<ProductEntity>>
 
+    @Query("SELECT * FROM ProductEntity WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): ProductEntity?
+
     @Query("SELECT * FROM ProductEntity WHERE barcode = :barcode LIMIT 1")
     suspend fun findByBarcode(barcode: String): ProductEntity?
 
     @Query("SELECT * FROM ProductEntity WHERE active = 1 AND (name LIKE '%' || :query || '%' OR sku LIKE '%' || :query || '%' OR barcode LIKE '%' || :query || '%') ORDER BY name LIMIT 100")
     suspend fun search(query: String): List<ProductEntity>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun save(product: ProductEntity): Long
+    @Insert
+    suspend fun insert(product: ProductEntity): Long
+
+    @Update
+    suspend fun update(product: ProductEntity)
+
+    @Query("UPDATE ProductEntity SET stockCache = stockCache + :delta, updatedAt = :updatedAt WHERE id = :productId")
+    suspend fun adjustStock(productId: Long, delta: Double, updatedAt: Long = System.currentTimeMillis())
+
+    @Query("UPDATE ProductEntity SET active = 0, updatedAt = :updatedAt WHERE id = :productId")
+    suspend fun archive(productId: Long, updatedAt: Long = System.currentTimeMillis())
 }
 
 @Dao
@@ -38,6 +50,15 @@ interface SalesDao {
     @Query("SELECT * FROM SaleEntity ORDER BY createdAt DESC LIMIT :limit")
     fun observeLatest(limit: Int = 100): Flow<List<SaleEntity>>
 
+    @Query("SELECT * FROM SaleEntity WHERE id = :saleId LIMIT 1")
+    suspend fun getSale(saleId: Long): SaleEntity?
+
+    @Query("SELECT * FROM SaleItemEntity WHERE saleId = :saleId ORDER BY id")
+    suspend fun getItems(saleId: Long): List<SaleItemEntity>
+
+    @Query("SELECT * FROM PaymentEntity WHERE saleId = :saleId ORDER BY id")
+    suspend fun getPayments(saleId: Long): List<PaymentEntity>
+
     @Insert
     suspend fun addSale(sale: SaleEntity): Long
 
@@ -53,6 +74,12 @@ interface SupplierDao {
     @Query("SELECT * FROM SupplierEntity WHERE active = 1 ORDER BY name")
     fun observeAll(): Flow<List<SupplierEntity>>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun save(supplier: SupplierEntity): Long
+    @Query("SELECT * FROM SupplierEntity WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): SupplierEntity?
+
+    @Insert
+    suspend fun insert(supplier: SupplierEntity): Long
+
+    @Update
+    suspend fun update(supplier: SupplierEntity)
 }
