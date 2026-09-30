@@ -1,0 +1,112 @@
+name: Release APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      versionName:
+        description: 'Version name, e.g. 0.1.1'
+        required: true
+        type: string
+      versionCode:
+        description: 'Android version code; must increase every release'
+        required: true
+        type: number
+      prerelease:
+        description: 'Mark as pre-release'
+        required: true
+        default: false
+        type: boolean
+      releaseNotes:
+        description: 'Optional release notes; leave blank to generate from commits'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      VERSION_NAME: ${{ inputs.versionName }}
+      VERSION_CODE: ${{ inputs.versionCode }}
+      RELEASE_NOTES: ${{ inputs.releaseNotes }}
+      STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform
+        run: sdkmanager "platforms;android-37" "build-tools;36.0.0"
+
+      - name: Validate signing secrets
+        shell: bash
+        run: |
+          test -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" || (echo "Missing ANDROID_KEYSTORE_BASE64" && exit 1)
+          test -n "$STORE_PASSWORD" || (echo "Missing ANDROID_KEYSTORE_PASSWORD" && exit 1)
+          test -n "$KEY_ALIAS" || (echo "Missing ANDROID_KEY_ALIAS" && exit 1)
+          test -n "$KEY_PASSWORD" || (echo "Missing ANDROID_KEY_PASSWORD" && exit 1)
+
+      - name: Restore release keystore
+        shell: bash
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/pos-release.jks"
+
+      - name: Build signed release APK
+        shell: bash
+        run: |
+          gradle :app:assembleRelease --stacktrace \
+            -PVERSION_NAME="$VERSION_NAME" \
+            -PVERSION_CODE="$VERSION_CODE" \
+            -PGITHUB_REPO="${{ github.repository }}" \
+            -PSIGNING_STORE_FILE="$RUNNER_TEMP/pos-release.jks" \
+            -PSIGNING_STORE_PASSWORD="$STORE_PASSWORD" \
+            -PSIGNING_KEY_ALIAS="$KEY_ALIAS" \
+            -PSIGNING_KEY_PASSWORD="$KEY_PASSWORD"
+
+      - name: Prepare APK
+        id: apk
+        shell: bash
+        run: |
+          APK="POS-v${VERSION_NAME}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+          echo "path=$APK" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        shell: bash
+        run: |
+          TAG="v${VERSION_NAME}"
+          APK="${{ steps.apk.outputs.path }}"
+          EXTRA=()
+          if [ "${{ inputs.prerelease }}" = "true" ]; then EXTRA+=(--prerelease); fi
+
+          if [ -n "$RELEASE_NOTES" ]; then
+            printf '%s\n' "$RELEASE_NOTES" > release-notes.md
+            gh release create "$TAG" "$APK" \
+              --title "POS $TAG" \
+              --notes-file release-notes.md \
+              "${EXTRA[@]}"
+          else
+            gh release create "$TAG" "$APK" \
+              --title "POS $TAG" \
+              --generate-notes \
+              "${EXTRA[@]}"
+          fi
