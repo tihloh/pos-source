@@ -15,13 +15,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.PointOfSale
-import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -245,52 +243,44 @@ private fun MainShell() {
         updateInfo = checker.check()
     }
 
-    if (scannerMode != null) {
-        val activeMode = scannerMode
-        BarcodeScannerView(
-            onScanned = { code ->
-                scannerMode = null
-                scope.launch {
-                    when (activeMode) {
-                        ScannerMode.POS -> {
-                            val product = repository.findByBarcode(code)
-                            if (product != null) {
-                                posScannedProduct = product
-                                screen = MainScreen.POS
-                            } else {
-                                screen = MainScreen.POS
-                                Toast.makeText(
-                                    context,
-                                    "Product not found. Add it from Products first.",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        }
-                        ScannerMode.INVENTORY -> {
-                            val product = repository.findByBarcode(code)
-                            if (product != null) {
-                                inventoryScannedProduct = product
-                                screen = MainScreen.INVENTORY
-                            } else {
-                                screen = MainScreen.INVENTORY
-                                Toast.makeText(
-                                    context,
-                                    "Product not found. Add it from Products first.",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        }
-                        ScannerMode.PRODUCT -> {
-                            pendingProductBarcode = code
-                            screen = MainScreen.PRODUCTS
-                        }
-                        null -> Unit
+    fun handleBarcode(activeMode: ScannerMode, code: String) {
+        scannerMode = null
+        scope.launch {
+            when (activeMode) {
+                ScannerMode.POS -> {
+                    val product = repository.findByBarcode(code)
+                    if (product != null) {
+                        posScannedProduct = product
+                        screen = MainScreen.POS
+                    } else {
+                        screen = MainScreen.POS
+                        Toast.makeText(
+                            context,
+                            "Product not found. Add it from Products first.",
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 }
-            },
-            onBack = { scannerMode = null }
-        )
-        return
+                ScannerMode.INVENTORY -> {
+                    val product = repository.findByBarcode(code)
+                    if (product != null) {
+                        inventoryScannedProduct = product
+                        screen = MainScreen.INVENTORY
+                    } else {
+                        screen = MainScreen.INVENTORY
+                        Toast.makeText(
+                            context,
+                            "Product not found. Add it from Products first.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+                ScannerMode.PRODUCT -> {
+                    pendingProductBarcode = code
+                    screen = MainScreen.PRODUCTS
+                }
+            }
+        }
     }
 
     updateInfo?.let { info ->
@@ -349,7 +339,8 @@ private fun MainShell() {
         )
     }
 
-    Scaffold(
+    Box(Modifier.fillMaxSize()) {
+        Scaffold(
         bottomBar = {
             NavigationBar {
                 MainScreen.entries.forEach { item ->
@@ -362,20 +353,6 @@ private fun MainShell() {
                 }
             }
         },
-        floatingActionButton = {
-            if (screen == MainScreen.POS || screen == MainScreen.INVENTORY || screen == MainScreen.PRODUCTS) {
-                FloatingActionButton(onClick = {
-                    scannerMode = when (screen) {
-                        MainScreen.POS -> ScannerMode.POS
-                        MainScreen.INVENTORY -> ScannerMode.INVENTORY
-                        MainScreen.PRODUCTS -> ScannerMode.PRODUCT
-                        else -> null
-                    }
-                }) {
-                    Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan")
-                }
-            }
-        }
     ) { padding ->
         Box(Modifier.padding(padding)) {
             when (screen) {
@@ -383,18 +360,21 @@ private fun MainShell() {
                     repository = repository,
                     cart = cart,
                     scannedProduct = posScannedProduct,
-                    onScannedProductHandled = { posScannedProduct = null }
+                    onScannedProductHandled = { posScannedProduct = null },
+                    onScanRequest = { scannerMode = ScannerMode.POS }
                 )
                 MainScreen.SALES -> SalesScreen(repository)
                 MainScreen.INVENTORY -> InventoryScreen(
                     repository = repository,
                     scannedProduct = inventoryScannedProduct,
-                    onScannedProductHandled = { inventoryScannedProduct = null }
+                    onScannedProductHandled = { inventoryScannedProduct = null },
+                    onScanRequest = { scannerMode = ScannerMode.INVENTORY }
                 )
                 MainScreen.PRODUCTS -> ProductsScreen(
                     repository = repository,
                     pendingBarcode = pendingProductBarcode,
-                    onPendingBarcodeHandled = { pendingProductBarcode = null }
+                    onPendingBarcodeHandled = { pendingProductBarcode = null },
+                    onScanRequest = { scannerMode = ScannerMode.PRODUCT }
                 )
                 MainScreen.MORE -> MoreScreen(
                     repository = repository,
@@ -403,6 +383,13 @@ private fun MainShell() {
                     }
                 )
             }
+        }
+
+        scannerMode?.let { activeMode ->
+            BarcodeScannerView(
+                onScanned = { code -> handleBarcode(activeMode, code) },
+                onBack = { scannerMode = null }
+            )
         }
     }
 }
