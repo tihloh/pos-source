@@ -258,11 +258,10 @@ private fun MainShell() {
                                 posScannedProduct = product
                                 screen = MainScreen.POS
                             } else {
-                                pendingProductBarcode = code
-                                screen = MainScreen.PRODUCTS
+                                screen = MainScreen.POS
                                 Toast.makeText(
                                     context,
-                                    "New barcode. Add product details first.",
+                                    "Product not found. Add it from Products first.",
                                     Toast.LENGTH_SHORT
                                 ).show()
                             }
@@ -273,11 +272,10 @@ private fun MainShell() {
                                 inventoryScannedProduct = product
                                 screen = MainScreen.INVENTORY
                             } else {
-                                pendingProductBarcode = code
-                                screen = MainScreen.PRODUCTS
+                                screen = MainScreen.INVENTORY
                                 Toast.makeText(
                                     context,
-                                    "Product not found. Add it first.",
+                                    "Product not found. Add it from Products first.",
                                     Toast.LENGTH_SHORT
                                 ).show()
                             }
