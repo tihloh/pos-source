@@ -44,6 +44,7 @@ import com.tihloh.pos.data.ProductEntity
 import com.tihloh.pos.product.ProductLookupOutcome
 import com.tihloh.pos.product.ProductLookupService
 import com.tihloh.pos.ui.NetworkImage
+import com.tihloh.pos.ui.ScanTextField
 import com.tihloh.pos.ui.money
 import com.tihloh.pos.ui.parseMoneyToCents
 import com.tihloh.pos.ui.quantity
@@ -71,7 +72,8 @@ private data class ProductDraft(
 fun ProductsScreen(
     repository: PosRepository,
     pendingBarcode: String?,
-    onPendingBarcodeHandled: () -> Unit
+    onPendingBarcodeHandled: () -> Unit,
+    onScanRequest: () -> Unit
 ) {
     val products by repository.products.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
@@ -88,31 +90,54 @@ fun ProductsScreen(
         error = null
         lookupStatus = null
         try {
+            val currentDraft = editor
             val existing = repository.findByBarcode(barcode)
-            if (existing != null) {
+            if (existing != null && currentDraft == null) {
                 editor = existing.toDraft()
                 lookupStatus = "Product already exists locally."
+            } else if (existing != null) {
+                editor = currentDraft.copy(barcode = barcode)
+                lookupStatus = "Barcode belongs to an existing local product."
             } else {
                 when (val outcome = lookup.lookup(barcode)) {
                     is ProductLookupOutcome.Found -> {
                         val found = outcome.product
-                        editor = ProductDraft(
-                            barcode = found.barcode,
-                            name = found.name,
-                            description = found.description.orEmpty(),
-                            brand = found.brand.orEmpty(),
-                            category = found.category.orEmpty(),
-                            imageUrl = found.imageUrl.orEmpty()
-                        )
+                        editor = if (currentDraft == null) {
+                            ProductDraft(
+                                barcode = found.barcode,
+                                name = found.name,
+                                description = found.description.orEmpty(),
+                                brand = found.brand.orEmpty(),
+                                category = found.category.orEmpty(),
+                                imageUrl = found.imageUrl.orEmpty()
+                            )
+                        } else {
+                            currentDraft.copy(
+                                barcode = found.barcode,
+                                name = currentDraft.name.ifBlank { found.name },
+                                description = currentDraft.description.ifBlank {
+                                    found.description.orEmpty()
+                                },
+                                brand = currentDraft.brand.ifBlank { found.brand.orEmpty() },
+                                category = currentDraft.category.ifBlank {
+                                    found.category.orEmpty()
+                                },
+                                imageUrl = currentDraft.imageUrl.ifBlank {
+                                    found.imageUrl.orEmpty()
+                                }
+                            )
+                        }
                         lookupStatus = "Loaded from " + found.source +
                             (found.quantity?.let { " · " + it } ?: "")
                     }
                     is ProductLookupOutcome.NotFound -> {
-                        editor = ProductDraft(barcode = barcode)
+                        editor = currentDraft?.copy(barcode = barcode)
+                            ?: ProductDraft(barcode = barcode)
                         error = "Barcode is valid, but it is not in the Open Facts databases yet."
                     }
                     is ProductLookupOutcome.Failed -> {
-                        editor = ProductDraft(barcode = barcode)
+                        editor = currentDraft?.copy(barcode = barcode)
+                            ?: ProductDraft(barcode = barcode)
                         error = outcome.message
                     }
                 }
@@ -144,12 +169,11 @@ fun ProductsScreen(
             }
         }
 
-        OutlinedTextField(
+        ScanTextField(
             value = search,
             onValueChange = { search = it },
-            label = { Text("Search name, barcode or SKU") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
+            label = "Search name / barcode / SKU",
+            onScan = onScanRequest
         )
 
         lookupStatus?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
@@ -185,6 +209,7 @@ fun ProductsScreen(
         ProductEditorDialog(
             initial = draft,
             onDismiss = { editor = null },
+            onScanRequest = onScanRequest,
             onSave = { updated ->
                 error = null
                 scope.launch {
@@ -259,6 +284,7 @@ private fun ProductRow(
 private fun ProductEditorDialog(
     initial: ProductDraft,
     onDismiss: () -> Unit,
+    onScanRequest: () -> Unit,
     onSave: (ProductDraft) -> Unit
 ) {
     var draft by remember(initial) { mutableStateOf(initial) }
@@ -283,7 +309,14 @@ private fun ProductEditorDialog(
                         )
                     }
                 }
-                item { Field("Barcode", draft.barcode) { draft = draft.copy(barcode = it) } }
+                item {
+                    ScanTextField(
+                        value = draft.barcode,
+                        onValueChange = { draft = draft.copy(barcode = it) },
+                        label = "Barcode",
+                        onScan = onScanRequest
+                    )
+                }
                 item { Field("SKU", draft.sku) { draft = draft.copy(sku = it) } }
                 item { Field("Name *", draft.name) { draft = draft.copy(name = it) } }
                 item { Field("Brand", draft.brand) { draft = draft.copy(brand = it) } }
