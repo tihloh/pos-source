@@ -1,8 +1,8 @@
 package com.tihloh.pos.ui
 
-import android.content.Intent
-import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -58,6 +58,7 @@ import com.tihloh.pos.ui.screens.MoreScreen
 import com.tihloh.pos.ui.screens.PosScreen
 import com.tihloh.pos.ui.screens.ProductsScreen
 import com.tihloh.pos.ui.screens.SalesScreen
+import com.tihloh.pos.update.InternalUpdater
 import com.tihloh.pos.update.UpdateChecker
 import com.tihloh.pos.update.UpdateInfo
 import kotlinx.coroutines.launch
@@ -186,15 +187,59 @@ private fun MainShell() {
         PosRepository(AppDatabase.get(context.applicationContext))
     }
     val checker = remember { UpdateChecker(context.applicationContext) }
+    val internalUpdater = remember { InternalUpdater(context.applicationContext) }
     val scope = rememberCoroutineScope()
     val cart = remember { mutableStateListOf<CartLine>() }
 
     var screen by rememberSaveable { mutableStateOf(MainScreen.POS) }
     var scannerMode by remember { mutableStateOf<ScannerMode?>(null) }
     var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
+    var pendingInstall by remember { mutableStateOf<UpdateInfo?>(null) }
+    var installingUpdate by remember { mutableStateOf(false) }
     var posScannedProduct by remember { mutableStateOf<ProductEntity?>(null) }
     var inventoryScannedProduct by remember { mutableStateOf<ProductEntity?>(null) }
     var pendingProductBarcode by remember { mutableStateOf<String?>(null) }
+
+    fun installUpdate(info: UpdateInfo) {
+        if (installingUpdate) return
+        installingUpdate = true
+        scope.launch {
+            internalUpdater.install(info)
+                .onSuccess {
+                    Toast.makeText(
+                        context,
+                        "Update ready. Confirm the Android install prompt.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    updateInfo = null
+                }
+                .onFailure {
+                    Toast.makeText(
+                        context,
+                        it.message ?: "Unable to install update.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            installingUpdate = false
+            pendingInstall = null
+        }
+    }
+
+    val installPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        val info = pendingInstall
+        if (info != null && internalUpdater.canInstallPackages()) {
+            installUpdate(info)
+        } else if (info != null) {
+            Toast.makeText(
+                context,
+                "Allow POS to install updates, then try again.",
+                Toast.LENGTH_LONG
+            ).show()
+            pendingInstall = null
+        }
+    }
 
     LaunchedEffect(Unit) {
         updateInfo = checker.check()
@@ -252,7 +297,9 @@ private fun MainShell() {
 
     updateInfo?.let { info ->
         AlertDialog(
-            onDismissRequest = { updateInfo = null },
+            onDismissRequest = {
+                if (!installingUpdate) updateInfo = null
+            },
             title = { Text("Update available: ${info.version}") },
             text = {
                 Column {
@@ -261,16 +308,45 @@ private fun MainShell() {
                         Spacer(Modifier.height(8.dp))
                         Text(info.notes.take(600))
                     }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        if (installingUpdate) {
+                            "Preparing update internally…"
+                        } else {
+                            "The APK will be streamed directly into Android's installer. " +
+                                "No APK will be saved in Downloads."
+                        }
+                    )
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(info.preferredUrl)))
-                    updateInfo = null
-                }) { Text("Update") }
+                TextButton(
+                    enabled = !installingUpdate,
+                    onClick = {
+                        if (info.apkUrl == null) {
+                            Toast.makeText(
+                                context,
+                                "This release has no APK asset.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        } else if (internalUpdater.canInstallPackages()) {
+                            installUpdate(info)
+                        } else {
+                            pendingInstall = info
+                            installPermissionLauncher.launch(
+                                internalUpdater.installPermissionIntent()
+                            )
+                        }
+                    }
+                ) {
+                    Text(if (installingUpdate) "Preparing…" else "Install update")
+                }
             },
             dismissButton = {
-                TextButton(onClick = { updateInfo = null }) { Text("Later") }
+                TextButton(
+                    enabled = !installingUpdate,
+                    onClick = { updateInfo = null }
+                ) { Text("Later") }
             }
         )
     }
