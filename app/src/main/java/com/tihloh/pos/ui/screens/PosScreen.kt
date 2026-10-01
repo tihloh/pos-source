@@ -42,6 +42,7 @@ import com.tihloh.pos.data.PosRepository
 import com.tihloh.pos.data.ProductEntity
 import com.tihloh.pos.data.SaleDetail
 import com.tihloh.pos.data.SaleLineInput
+import com.tihloh.pos.ui.ScanTextField
 import com.tihloh.pos.ui.money
 import com.tihloh.pos.ui.parseMoneyToCents
 import com.tihloh.pos.ui.quantity
@@ -53,7 +54,8 @@ fun PosScreen(
     repository: PosRepository,
     cart: SnapshotStateList<CartLine>,
     scannedProduct: ProductEntity?,
-    onScannedProductHandled: () -> Unit
+    onScannedProductHandled: () -> Unit,
+    onScanRequest: () -> Unit
 ) {
     val products by repository.products.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
@@ -84,12 +86,11 @@ fun PosScreen(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Text("POS", style = MaterialTheme.typography.headlineMedium)
-        OutlinedTextField(
+        ScanTextField(
             value = query,
             onValueChange = { query = it },
-            label = { Text("Search product or scan barcode") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
+            label = "Search product / barcode",
+            onScan = onScanRequest
         )
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 
