@@ -96,7 +96,7 @@ fun ProductsScreen(
                 editor = existing.toDraft()
                 lookupStatus = "Product already exists locally."
             } else if (existing != null) {
-                editor = currentDraft.copy(barcode = barcode)
+                editor = currentDraft!!.copy(barcode = barcode)
                 lookupStatus = "Barcode belongs to an existing local product."
             } else {
                 when (val outcome = lookup.lookup(barcode)) {
