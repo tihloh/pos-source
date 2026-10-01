@@ -384,6 +384,7 @@ private fun MainShell() {
                 )
             }
         }
+        }
 
         scannerMode?.let { activeMode ->
             BarcodeScannerView(
