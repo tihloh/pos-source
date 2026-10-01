@@ -61,10 +61,11 @@ fun PosScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var checkout by remember { mutableStateOf(false) }
     var completedSale by remember { mutableStateOf<SaleDetail?>(null) }
+    var quantityProduct by remember { mutableStateOf<ProductEntity?>(null) }
 
-    LaunchedEffect(scannedProduct) {
+    LaunchedEffect(scannedProduct?.id) {
         val product = scannedProduct ?: return@LaunchedEffect
-        error = addProductToCart(cart, product)
+        quantityProduct = product
         onScannedProductHandled()
     }
 
@@ -113,8 +114,8 @@ fun PosScreen(
                             }
                             Button(
                                 onClick = {
-                                    error = addProductToCart(cart, product)
-                                    if (error == null) query = ""
+                                    quantityProduct = product
+                                    query = ""
                                 },
                                 enabled = !product.inventoryEnabled || product.stockCache > 0
                             ) { Text("Add") }
@@ -193,6 +194,19 @@ fun PosScreen(
         }
     }
 
+    quantityProduct?.let { product ->
+        QuantityDialog(
+            product = product,
+            onDismiss = { quantityProduct = null },
+            onAdd = { qty ->
+                error = addProductToCart(cart, product, qty)
+                if (error == null) {
+                    quantityProduct = null
+                }
+            }
+        )
+    }
+
     if (checkout) {
         CheckoutDialog(
             totalCents = total,
@@ -239,6 +253,63 @@ fun PosScreen(
             }
         )
     }
+}
+
+@Composable
+private fun QuantityDialog(
+    product: ProductEntity,
+    onDismiss: () -> Unit,
+    onAdd: (Double) -> Unit
+) {
+    var amount by remember(product.id) { mutableStateOf("1") }
+    val parsed = amount.toDoubleOrNull()
+    val valid = parsed != null &&
+        parsed > 0 &&
+        (!product.inventoryEnabled || parsed <= product.stockCache + 0.000001)
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(product.name) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Price: " + money(product.sellingPriceCents))
+                if (product.inventoryEnabled) {
+                    Text("Available: " + quantity(product.stockCache) + " " + product.unit)
+                }
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { value ->
+                        amount = value.filter { it.isDigit() || it == '.' }
+                    },
+                    label = { Text("Quantity") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (parsed != null && parsed > 0) {
+                    Text(
+                        "Line total: " +
+                            money((product.sellingPriceCents * parsed).roundToLong())
+                    )
+                }
+                if (parsed != null && product.inventoryEnabled && parsed > product.stockCache) {
+                    Text(
+                        "Only " + quantity(product.stockCache) + " available.",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onAdd(parsed ?: 1.0) },
+                enabled = valid
+            ) { Text("Add to cart") }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 @Composable
