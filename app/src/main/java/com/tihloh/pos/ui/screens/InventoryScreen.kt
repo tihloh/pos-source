@@ -31,6 +31,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.tihloh.pos.data.PosRepository
 import com.tihloh.pos.data.ProductEntity
+import com.tihloh.pos.ui.ScanTextField
 import com.tihloh.pos.ui.quantity
 import kotlinx.coroutines.launch
 
@@ -38,18 +39,33 @@ import kotlinx.coroutines.launch
 fun InventoryScreen(
     repository: PosRepository,
     scannedProduct: ProductEntity?,
-    onScannedProductHandled: () -> Unit
+    onScannedProductHandled: () -> Unit,
+    onScanRequest: () -> Unit
 ) {
     val products by repository.products.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf<ProductEntity?>(null) }
+    var query by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(scannedProduct?.id) {
         if (scannedProduct != null) {
-            selected = scannedProduct
+            query = scannedProduct.barcode
+                ?: scannedProduct.sku
+                ?: scannedProduct.name
             onScannedProductHandled()
         }
+    }
+
+    val filtered = remember(products, query) {
+        products
+            .filter { it.inventoryEnabled }
+            .filter {
+                query.isBlank() ||
+                    it.name.contains(query, ignoreCase = true) ||
+                    it.barcode.orEmpty().contains(query, ignoreCase = true) ||
+                    it.sku.orEmpty().contains(query, ignoreCase = true)
+            }
     }
 
     Column(
@@ -57,11 +73,21 @@ fun InventoryScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("Inventory", style = MaterialTheme.typography.headlineMedium)
-        Text("Scan a product or tap Adjust. Every change is recorded in the inventory ledger.")
+        Text("Find stock quickly, then adjust only when needed.")
+        ScanTextField(
+            value = query,
+            onValueChange = { query = it },
+            label = "Search product / barcode",
+            onScan = onScanRequest
+        )
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 
+        if (filtered.isEmpty()) {
+            Text("No matching inventory item.")
+        }
+
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(products.filter { it.inventoryEnabled }, key = { it.id }) { product ->
+            items(filtered, key = { it.id }) { product ->
                 Card(Modifier.fillMaxWidth()) {
                     Row(
                         Modifier.padding(14.dp),
