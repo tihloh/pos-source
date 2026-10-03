@@ -55,6 +55,9 @@ data class CustomerEntity(
     val address: String? = null,
     val careOf: String? = null,
     val notes: String? = null,
+    val identitySource: String? = null,
+    val identityVerified: Boolean = false,
+    val identityVerifiedAt: Long? = null,
     val active: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
