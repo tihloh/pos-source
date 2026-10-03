@@ -20,12 +20,16 @@ class PosRepository(private val db: AppDatabase) {
     val products = db.products().observeAll()
     val sales = db.sales().observeLatest()
     val suppliers = db.suppliers().observeAll()
+    val inventoryTransactions = db.inventory().observeAll()
 
     suspend fun findByBarcode(barcode: String): ProductEntity? =
         db.products().findByBarcode(barcode.trim())
 
-    suspend fun saveProduct(product: ProductEntity, openingQuantity: Double = 0.0): Long =
-        db.withTransaction {
+    suspend fun saveProduct(
+        product: ProductEntity,
+        openingQuantity: Double = 0.0,
+        supplierIds: List<Long>? = null
+    ): Long = db.withTransaction {
             val now = System.currentTimeMillis()
             val cleanBarcode = product.barcode?.trim()?.ifBlank { null }
             val clean = product.copy(
@@ -42,6 +46,22 @@ class PosRepository(private val db: AppDatabase) {
                 clean.id
             }
 
+            if (supplierIds != null) {
+                db.productSuppliers().clearForProduct(id)
+                val distinct = supplierIds.distinct()
+                if (distinct.isNotEmpty()) {
+                    db.productSuppliers().upsertLinks(
+                        distinct.mapIndexed { index, supplierId ->
+                            ProductSupplierCrossRef(
+                                productId = id,
+                                supplierId = supplierId,
+                                isPrimary = index == 0
+                            )
+                        }
+                    )
+                }
+            }
+
             if (clean.id == 0L && clean.inventoryEnabled && openingQuantity != 0.0) {
                 db.inventory().add(
                     InventoryTransactionEntity(
@@ -56,6 +76,26 @@ class PosRepository(private val db: AppDatabase) {
 
             id
         }
+
+    suspend fun supplierIdsForProduct(productId: Long): List<Long> =
+        db.productSuppliers().supplierIdsForProduct(productId)
+
+    suspend fun productsForSupplier(supplierId: Long): List<ProductEntity> {
+        val ids = db.productSuppliers().productIdsForSupplier(supplierId).toSet()
+        return db.products().search("").filter { it.id in ids }
+    }
+
+    suspend fun setProductSuppliers(productId: Long, supplierIds: List<Long>) = db.withTransaction {
+        db.productSuppliers().clearForProduct(productId)
+        val distinct = supplierIds.distinct()
+        if (distinct.isNotEmpty()) {
+            db.productSuppliers().upsertLinks(
+                distinct.mapIndexed { index, supplierId ->
+                    ProductSupplierCrossRef(productId, supplierId, index == 0)
+                }
+            )
+        }
+    }
 
     suspend fun archiveProduct(productId: Long) {
         db.products().archive(productId)
@@ -166,6 +206,9 @@ class PosRepository(private val db: AppDatabase) {
             payments = payments
         )
     }
+
+    suspend fun salesRange(from: Long, to: Long): List<SaleEntity> =
+        db.sales().getRange(from, to)
 
     suspend fun saleDetail(saleId: Long): SaleDetail? {
         val sale = db.sales().getSale(saleId) ?: return null
