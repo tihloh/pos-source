@@ -3,12 +3,14 @@ package com.tihloh.pos.sync
 import com.tihloh.pos.data.ProductEntity
 import com.tihloh.pos.data.SaleEntity
 import com.tihloh.pos.data.SupplierEntity
+import com.tihloh.pos.product.ProductImageStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Base64
 
 data class SyncSnapshot(
     val products: List<ProductEntity>,
@@ -55,6 +57,16 @@ class CentralSyncClient(private val config: SyncConfig) {
                         put("stock", p.stockCache)
                         put("active", p.active)
                         put("updatedAt", p.updatedAt)
+                        put("imageUrl", p.imageUrl)
+                        ProductImageStore.fileFromUrl(p.imageUrl)?.let { file ->
+                            if (file.length() in 1..3_000_000) {
+                                put("imageMime", "image/jpeg")
+                                put(
+                                    "imageBase64",
+                                    Base64.getEncoder().encodeToString(file.readBytes())
+                                )
+                            }
+                        }
                     }
                 }))
                 put("suppliers", JSONArray(snapshot.suppliers.map { s ->
