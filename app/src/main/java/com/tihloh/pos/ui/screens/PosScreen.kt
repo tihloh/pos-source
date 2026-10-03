@@ -451,7 +451,10 @@ private fun CheckoutDialog(
                     ) { Text("Exact") }
                     if (paymentType == "Cash") {
                         OutlinedButton(
-                            onClick = { amount = "%.2f".format((totalCents + 10000) / 100.0) },
+                            onClick = {
+                                val current = parseMoneyToCents(amount) ?: 0L
+                                amount = "%.2f".format((current + 10000) / 100.0)
+                            },
                             modifier = Modifier.weight(1f)
                         ) { Text("+ ₱100") }
                     }
