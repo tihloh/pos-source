@@ -20,6 +20,8 @@ fun SaleDetail.toReceiptData(): ReceiptData {
         paymentType = payment?.type ?: "Unknown",
         amountPaidCents = sale.amountPaidCents,
         changeCents = sale.changeCents,
-        timestamp = sale.createdAt
+        timestamp = sale.createdAt,
+        customerName = sale.customerName,
+        careOf = sale.careOf
     )
 }
