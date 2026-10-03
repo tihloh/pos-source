@@ -44,8 +44,7 @@ import com.tihloh.pos.data.PosRepository
 import com.tihloh.pos.data.ProductEntity
 import com.tihloh.pos.data.SaleDetail
 import com.tihloh.pos.data.SaleLineInput
-import com.tihloh.pos.printer.PrinterSettings
-import com.tihloh.pos.printer.TcpEscPosPrinter
+import com.tihloh.pos.printer.ReceiptPrinter
 import com.tihloh.pos.printer.toReceiptData
 import com.tihloh.pos.ui.ScanTextField
 import com.tihloh.pos.ui.money
@@ -265,27 +264,18 @@ fun PosScreen(
             confirmButton = {
                 Button(onClick = {
                     scope.launch {
-                        val cfg = PrinterSettings(context).load()
-                        if (!cfg.enabled || cfg.host.isBlank()) {
-                            Toast.makeText(
-                                context,
-                                "Configure the receipt printer in More.",
-                                Toast.LENGTH_LONG
-                            ).show()
-                        } else {
-                            TcpEscPosPrinter(cfg.host, cfg.port)
-                                .print(detail.toReceiptData())
-                                .onSuccess {
-                                    Toast.makeText(context, "Receipt printed.", Toast.LENGTH_SHORT).show()
-                                }
-                                .onFailure {
-                                    Toast.makeText(
-                                        context,
-                                        it.message ?: "Printing failed.",
-                                        Toast.LENGTH_LONG
-                                    ).show()
-                                }
-                        }
+                        ReceiptPrinter(context)
+                            .print(detail.toReceiptData())
+                            .onSuccess {
+                                Toast.makeText(context, "Receipt printed.", Toast.LENGTH_SHORT).show()
+                            }
+                            .onFailure {
+                                Toast.makeText(
+                                    context,
+                                    it.message ?: "Printing failed.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
                     }
                 }) { Text("Print") }
             },
@@ -370,34 +360,71 @@ private fun CheckoutDialog(
         onDismissRequest = onDismiss,
         title = { Text("Payment") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Total: ${money(totalCents)}", style = MaterialTheme.typography.titleLarge)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("Cash", "GCash", "Maya", "Card").forEach { type ->
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                        Text("Amount due", style = MaterialTheme.typography.labelLarge)
+                        Text(
+                            money(totalCents),
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                Text("Payment method", style = MaterialTheme.typography.labelLarge)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("Cash", "GCash").forEach { type ->
                         FilterChip(
                             selected = paymentType == type,
                             onClick = { paymentType = type },
-                            label = { Text(type) }
+                            label = { Text(type) },
+                            modifier = Modifier.weight(1f)
                         )
                     }
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedTextField(
-                        value = amount,
-                        onValueChange = { amount = it },
-                        label = { Text("Payment amount") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedButton(
-                        onClick = { amount = "%.2f".format(totalCents / 100.0) }
-                    ) { Text("Exact") }
+                    listOf("Maya", "Card").forEach { type ->
+                        FilterChip(
+                            selected = paymentType == type,
+                            onClick = { paymentType = type },
+                            label = { Text(type) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
+
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { amount = it.filter { ch -> ch.isDigit() || ch == '.' } },
+                    label = { Text("Payment amount") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { amount = "%.2f".format(totalCents / 100.0) },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Exact") }
+                    if (paymentType == "Cash") {
+                        OutlinedButton(
+                            onClick = { amount = "%.2f".format((totalCents + 10000) / 100.0) },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("+ ₱100") }
+                    }
+                }
+
                 if (paymentType != "Cash") {
                     OutlinedTextField(
                         value = reference,
@@ -407,7 +434,21 @@ private fun CheckoutDialog(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
-                Text("Change: ${money(change)}")
+
+                Card(Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Change")
+                        Text(
+                            money(change),
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
