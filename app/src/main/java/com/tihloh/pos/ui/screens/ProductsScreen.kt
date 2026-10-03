@@ -161,11 +161,19 @@ fun ProductsScreen(
         Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Products", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                "Products",
+                style = MaterialTheme.typography.headlineMedium,
+                modifier = Modifier.weight(1f)
+            )
             Button(onClick = { editor = ProductDraft() }) {
                 Icon(Icons.Default.Add, contentDescription = null)
-                Text(" Add")
+                Text("Add")
             }
         }
 
@@ -255,20 +263,33 @@ private fun ProductRow(
 ) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Column(Modifier.weight(1f)) {
                     Text(product.name, style = MaterialTheme.typography.titleMedium)
                     Text(
-                        listOfNotNull(product.barcode, product.sku).joinToString(" · ").ifBlank { "No barcode" },
+                        listOfNotNull(product.barcode, product.sku)
+                            .joinToString(" · ")
+                            .ifBlank { "No barcode" },
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
-                Text(money(product.sellingPriceCents), style = MaterialTheme.typography.titleMedium)
-                IconButton(onClick = onEdit) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit")
-                }
-                IconButton(onClick = onArchive) {
-                    Icon(Icons.Default.DeleteOutline, contentDescription = "Archive")
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        money(product.sellingPriceCents),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Row {
+                        IconButton(onClick = onEdit) {
+                            Icon(Icons.Default.Edit, contentDescription = "Edit")
+                        }
+                        IconButton(onClick = onArchive) {
+                            Icon(Icons.Default.DeleteOutline, contentDescription = "Archive")
+                        }
+                    }
                 }
             }
             Spacer(Modifier.height(6.dp))
