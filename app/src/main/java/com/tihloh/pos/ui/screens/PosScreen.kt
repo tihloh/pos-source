@@ -1,5 +1,6 @@
 package com.tihloh.pos.ui.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,6 +36,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -42,6 +44,9 @@ import com.tihloh.pos.data.PosRepository
 import com.tihloh.pos.data.ProductEntity
 import com.tihloh.pos.data.SaleDetail
 import com.tihloh.pos.data.SaleLineInput
+import com.tihloh.pos.printer.PrinterSettings
+import com.tihloh.pos.printer.TcpEscPosPrinter
+import com.tihloh.pos.printer.toReceiptData
 import com.tihloh.pos.ui.ScanTextField
 import com.tihloh.pos.ui.money
 import com.tihloh.pos.ui.parseMoneyToCents
@@ -59,6 +64,7 @@ fun PosScreen(
 ) {
     val products by repository.products.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var query by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var checkout by remember { mutableStateOf(false) }
@@ -257,6 +263,33 @@ fun PosScreen(
                 }
             },
             confirmButton = {
+                Button(onClick = {
+                    scope.launch {
+                        val cfg = PrinterSettings(context).load()
+                        if (!cfg.enabled || cfg.host.isBlank()) {
+                            Toast.makeText(
+                                context,
+                                "Configure the receipt printer in More.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        } else {
+                            TcpEscPosPrinter(cfg.host, cfg.port)
+                                .print(detail.toReceiptData())
+                                .onSuccess {
+                                    Toast.makeText(context, "Receipt printed.", Toast.LENGTH_SHORT).show()
+                                }
+                                .onFailure {
+                                    Toast.makeText(
+                                        context,
+                                        it.message ?: "Printing failed.",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                        }
+                    }
+                }) { Text("Print") }
+            },
+            dismissButton = {
                 TextButton(onClick = { completedSale = null }) { Text("Done") }
             }
         )
@@ -327,7 +360,7 @@ private fun CheckoutDialog(
     onCheckout: (paymentType: String, amountPaidCents: Long, reference: String?) -> Unit
 ) {
     var paymentType by remember { mutableStateOf("Cash") }
-    var amount by remember(totalCents) { mutableStateOf((totalCents / 100.0).toString()) }
+    var amount by remember(totalCents) { mutableStateOf("") }
     var reference by remember { mutableStateOf("") }
     val paid = parseMoneyToCents(amount)
     val valid = paid != null && paid >= totalCents
@@ -343,22 +376,28 @@ private fun CheckoutDialog(
                     listOf("Cash", "GCash", "Maya", "Card").forEach { type ->
                         FilterChip(
                             selected = paymentType == type,
-                            onClick = {
-                                paymentType = type
-                                if (type != "Cash") amount = (totalCents / 100.0).toString()
-                            },
+                            onClick = { paymentType = type },
                             label = { Text(type) }
                         )
                     }
                 }
-                OutlinedTextField(
-                    value = amount,
-                    onValueChange = { amount = it },
-                    label = { Text("Payment amount") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = amount,
+                        onValueChange = { amount = it },
+                        label = { Text("Payment amount") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedButton(
+                        onClick = { amount = "%.2f".format(totalCents / 100.0) }
+                    ) { Text("Exact") }
+                }
                 if (paymentType != "Cash") {
                     OutlinedTextField(
                         value = reference,
