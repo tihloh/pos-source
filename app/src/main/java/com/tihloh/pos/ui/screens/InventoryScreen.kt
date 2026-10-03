@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.tihloh.pos.data.InventoryTransactionEntity
 import com.tihloh.pos.data.PosRepository
 import com.tihloh.pos.data.ProductEntity
+import com.tihloh.pos.ui.ProductThumbnail
 import com.tihloh.pos.ui.ScanTextField
 import com.tihloh.pos.ui.quantity
 import kotlinx.coroutines.launch
@@ -81,7 +82,7 @@ fun InventoryScreen(
             Column(Modifier.weight(1f)) {
                 Text("Inventory", style = MaterialTheme.typography.headlineSmall)
                 Text(
-                    "Beginning + Added − Removed − Sold = Ending",
+                    "Beginning + Added − Removed − Sold = Current",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -165,6 +166,10 @@ private fun InventoryRow(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                ProductThumbnail(
+                    imageUrl = product.imageUrl,
+                    size = 44.dp
+                )
                 Column(Modifier.weight(1f)) {
                     Text(product.name, style = MaterialTheme.typography.titleSmall)
                     Text(
@@ -189,7 +194,6 @@ private fun InventoryRow(
                 CompactMetric("+Add", quantity(added), Modifier.weight(1f))
                 CompactMetric("-Rem", quantity(removed), Modifier.weight(1f))
                 CompactMetric("-Sold", quantity(sold), Modifier.weight(1f))
-                CompactMetric("End", quantity(product.stockCache), Modifier.weight(1f))
             }
         }
     }
