@@ -99,6 +99,30 @@ interface SupplierDao {
 
 
 @Dao
+interface CustomerDao {
+    @Query("SELECT * FROM CustomerEntity WHERE active = 1 ORDER BY name")
+    fun observeAll(): Flow<List<CustomerEntity>>
+
+    @Query("SELECT * FROM CustomerEntity WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): CustomerEntity?
+
+    @Query("SELECT * FROM CustomerEntity WHERE barcode = :barcode LIMIT 1")
+    suspend fun findByBarcode(barcode: String): CustomerEntity?
+
+    @Query("SELECT * FROM CustomerEntity WHERE active = 1 ORDER BY name")
+    suspend fun getAllActive(): List<CustomerEntity>
+
+    @Insert
+    suspend fun insert(customer: CustomerEntity): Long
+
+    @Update
+    suspend fun update(customer: CustomerEntity)
+
+    @Query("UPDATE CustomerEntity SET active = 0, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun archive(id: Long, updatedAt: Long = System.currentTimeMillis())
+}
+
+@Dao
 interface ProductSupplierDao {
     @Query("SELECT supplierId FROM ProductSupplierCrossRef WHERE productId = :productId ORDER BY isPrimary DESC, supplierId")
     suspend fun supplierIdsForProduct(productId: Long): List<Long>
