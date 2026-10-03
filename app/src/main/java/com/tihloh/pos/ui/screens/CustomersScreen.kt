@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -33,11 +35,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.tihloh.pos.data.CustomerEntity
 import com.tihloh.pos.data.PosRepository
+import com.tihloh.pos.data.SaleEntity
 import com.tihloh.pos.philsys.PhilSysParseResult
 import com.tihloh.pos.philsys.PhilSysProfile
 import com.tihloh.pos.philsys.PhilSysQrParser
 import com.tihloh.pos.ui.ScanTextField
+import com.tihloh.pos.ui.money
 import kotlinx.coroutines.launch
+import java.text.DateFormat
+import java.util.Date
 
 @Composable
 fun CustomersScreen(
@@ -51,9 +57,11 @@ fun CustomersScreen(
     onBack: () -> Unit
 ) {
     val customers by repository.customers.collectAsState(initial = emptyList())
+    val sales by repository.sales.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf<CustomerEntity?>(null) }
+    var accountCustomer by remember { mutableStateOf<CustomerEntity?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var showPhilSysConsent by remember { mutableStateOf(false) }
     var philSysProfile by remember { mutableStateOf<PhilSysProfile?>(null) }
@@ -62,7 +70,7 @@ fun CustomersScreen(
         val code = pendingBarcode ?: return@LaunchedEffect
         val existing = repository.findCustomerByBarcode(code)
         if (existing != null) {
-            editing = existing
+            accountCustomer = existing
         } else {
             editing = CustomerEntity(barcode = code.trim(), name = "")
         }
@@ -135,9 +143,16 @@ fun CustomersScreen(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(filtered, key = { it.id }) { customer ->
+                    val customerPayables = sales.filter {
+                        it.customerId == customer.id && it.status == "ACCOUNT_PAYABLE"
+                    }
+                    val outstanding = customerPayables.sumOf {
+                        (it.totalCents - it.amountPaidCents).coerceAtLeast(0L)
+                    }
+
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        onClick = { editing = customer }
+                        onClick = { accountCustomer = customer }
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -174,11 +189,47 @@ fun CustomersScreen(
                                     )
                                 }
                             }
+                            if (outstanding > 0L) {
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text(
+                                        "Payable",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                    Text(
+                                        money(outstanding),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                    Text(
+                                        "${customerPayables.size} sale" +
+                                            if (customerPayables.size == 1) "" else "s",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    accountCustomer?.let { customer ->
+        val accountSales = sales.filter {
+            it.customerId == customer.id && it.status == "ACCOUNT_PAYABLE"
+        }.sortedByDescending { it.createdAt }
+
+        CustomerAccountDialog(
+            customer = customer,
+            accountSales = accountSales,
+            onDismiss = { accountCustomer = null },
+            onEdit = {
+                accountCustomer = null
+                editing = customer
+            }
+        )
     }
 
     if (showPhilSysConsent) {
@@ -382,6 +433,120 @@ private fun PhilSysReviewDialog(
         },
         dismissButton = {
             OutlinedButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
+}
+
+
+@Composable
+private fun CustomerAccountDialog(
+    customer: CustomerEntity,
+    accountSales: List<SaleEntity>,
+    onDismiss: () -> Unit,
+    onEdit: () -> Unit
+) {
+    val outstanding = accountSales.sumOf {
+        (it.totalCents - it.amountPaidCents).coerceAtLeast(0L)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column {
+                Text(customer.name)
+                Text(
+                    customer.barcode,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Card(Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(Icons.Default.ReceiptLong, contentDescription = null)
+                        Column(Modifier.weight(1f)) {
+                            Text("Account Payable", style = MaterialTheme.typography.labelMedium)
+                            Text(
+                                if (outstanding > 0L) money(outstanding) else "No outstanding balance",
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = if (outstanding > 0L) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                }
+                            )
+                        }
+                    }
+                }
+
+                val contact = listOfNotNull(customer.phone, customer.email)
+                    .filter { it.isNotBlank() }
+                    .joinToString(" · ")
+                if (contact.isNotBlank()) {
+                    Text(contact, style = MaterialTheme.typography.bodySmall)
+                }
+
+                if (accountSales.isEmpty()) {
+                    Text(
+                        "This customer has no Account Payable sales.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text("Account activity", style = MaterialTheme.typography.titleSmall)
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 320.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        items(accountSales, key = { it.id }) { sale ->
+                            val due = (sale.totalCents - sale.amountPaidCents).coerceAtLeast(0L)
+                            Card(Modifier.fillMaxWidth()) {
+                                Column(
+                                    Modifier.fillMaxWidth().padding(10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Row(Modifier.fillMaxWidth()) {
+                                        Text(
+                                            sale.receiptNumber,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Text(
+                                            money(due),
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                    Text(
+                                        DateFormat.getDateTimeInstance(
+                                            DateFormat.MEDIUM,
+                                            DateFormat.SHORT
+                                        ).format(Date(sale.createdAt)),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        "Sale ${money(sale.totalCents)} · Paid ${money(sale.amountPaidCents)}",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onEdit) { Text("Edit customer") }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) { Text("Close") }
         }
     )
 }
