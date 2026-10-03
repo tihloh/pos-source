@@ -21,7 +21,6 @@ fun SaleDetail.toReceiptData(): ReceiptData {
         amountPaidCents = sale.amountPaidCents,
         changeCents = sale.changeCents,
         timestamp = sale.createdAt,
-        customerName = sale.customerName,
-        careOf = sale.careOf
+        customerName = sale.customerName
     )
 }
