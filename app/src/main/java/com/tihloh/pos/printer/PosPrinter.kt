@@ -19,6 +19,8 @@ data class ReceiptData(
     val amountPaidCents: Long,
     val changeCents: Long,
     val timestamp: Long,
+    val customerName: String? = null,
+    val careOf: String? = null,
     val storeName: String = "POS",
     val receiptTemplate: String = DEFAULT_RECEIPT_TEMPLATE
 )
@@ -26,6 +28,8 @@ data class ReceiptData(
 const val DEFAULT_RECEIPT_TEMPLATE = """{store}
 Receipt {receipt}
 {datetime}
+Customer: {customer}
+Care of: {care_of}
 --------------------------------
 {items}
 --------------------------------
