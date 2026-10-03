@@ -32,9 +32,17 @@ private val RetailDark = darkColorScheme(
 )
 
 @Composable
-fun PosTheme(content: @Composable () -> Unit) {
+fun PosTheme(
+    mode: ThemeMode = ThemeMode.SYSTEM,
+    content: @Composable () -> Unit
+) {
+    val dark = when (mode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
     MaterialTheme(
-        colorScheme = if (isSystemInDarkTheme()) RetailDark else RetailLight,
+        colorScheme = if (dark) RetailDark else RetailLight,
         content = content
     )
 }
