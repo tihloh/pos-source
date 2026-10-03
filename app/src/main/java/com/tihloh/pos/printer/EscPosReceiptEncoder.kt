@@ -44,6 +44,8 @@ object EscPosReceiptEncoder {
             "{date}" to SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(date),
             "{time}" to SimpleDateFormat("HH:mm", Locale.getDefault()).format(date),
             "{datetime}" to DateFormat.getDateTimeInstance().format(date),
+            "{customer}" to (receipt.customerName ?: "Walk-in"),
+            "{care_of}" to receipt.careOf.orEmpty(),
             "{items}" to items,
             "{item_count}" to receipt.lines.sumOf { it.quantity }.let(::qty),
             "{subtotal}" to money(receipt.subtotalCents),
