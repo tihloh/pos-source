@@ -52,7 +52,9 @@ fun InventoryScreen(
 
     LaunchedEffect(scannedProduct?.id) {
         if (scannedProduct != null) {
-            query = scannedProduct.barcode ?: scannedProduct.sku ?: scannedProduct.name
+            query = ""
+            selected = scannedProduct
+            error = null
             onScannedProductHandled()
         }
     }
@@ -69,15 +71,22 @@ fun InventoryScreen(
     val ledgerByProduct = remember(transactions) { transactions.groupBy { it.productId } }
 
     Column(
-        Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text("Inventory", style = MaterialTheme.typography.headlineMedium)
-        Text(
-            "Beginning + Added − Removed − Sold = Ending",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("Inventory", style = MaterialTheme.typography.headlineSmall)
+                Text(
+                    "Beginning + Added − Removed − Sold = Ending",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
 
         ScanTextField(
             value = query,
@@ -93,7 +102,7 @@ fun InventoryScreen(
 
         LazyColumn(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(5.dp)
         ) {
             items(filtered, key = { it.id }) { product ->
                 val ledger = ledgerByProduct[product.id].orEmpty()
@@ -148,74 +157,56 @@ private fun InventoryRow(
 
     Card(Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text(product.name, style = MaterialTheme.typography.titleMedium)
+                    Text(product.name, style = MaterialTheme.typography.titleSmall)
                     Text(
                         product.barcode ?: product.sku ?: "No barcode",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Button(onClick = onAdjust) { Text("Adjust") }
+                Text(
+                    "${quantity(product.stockCache)} ${product.unit}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                OutlinedButton(onClick = onAdjust) { Text("Adjust") }
             }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                BalanceMetric(
-                    label = "Beginning",
-                    value = quantity(beginning),
-                    modifier = Modifier.weight(1f)
-                )
-                BalanceMetric(
-                    label = "Added",
-                    value = "+${quantity(added)}",
-                    modifier = Modifier.weight(1f)
-                )
-                BalanceMetric(
-                    label = "Ending",
-                    value = quantity(product.stockCache),
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                BalanceMetric(
-                    label = "Removed",
-                    value = "-${quantity(removed)}",
-                    modifier = Modifier.weight(1f)
-                )
-                BalanceMetric(
-                    label = "Sold",
-                    value = "-${quantity(sold)}",
-                    modifier = Modifier.weight(1f)
-                )
+                CompactMetric("Beg", quantity(beginning), Modifier.weight(1f))
+                CompactMetric("+Add", quantity(added), Modifier.weight(1f))
+                CompactMetric("-Rem", quantity(removed), Modifier.weight(1f))
+                CompactMetric("-Sold", quantity(sold), Modifier.weight(1f))
+                CompactMetric("End", quantity(product.stockCache), Modifier.weight(1f))
             }
         }
     }
 }
 
 @Composable
-private fun BalanceMetric(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(label, style = MaterialTheme.typography.labelSmall)
-            Text(value, style = MaterialTheme.typography.titleMedium)
-        }
+private fun CompactMetric(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.padding(vertical = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(value, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
