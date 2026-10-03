@@ -102,8 +102,9 @@ fun PosScreen(
                 items(filtered, key = { it.id }) { product ->
                     Card(Modifier.fillMaxWidth()) {
                         Row(
-                            Modifier.padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text(product.name, style = MaterialTheme.typography.titleSmall)
@@ -166,7 +167,10 @@ fun PosScreen(
                             }) {
                                 Icon(Icons.Default.Remove, contentDescription = "Decrease")
                             }
-                            Text(quantity(line.quantity))
+                            Text(
+                                quantity(line.quantity),
+                                style = MaterialTheme.typography.titleSmall
+                            )
                             IconButton(onClick = {
                                 error = addProductToCart(cart, line.product)
                             }) {
@@ -178,19 +182,22 @@ fun PosScreen(
             }
         }
 
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Card(Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
             Column(Modifier.weight(1f)) {
                 Text("TOTAL", style = MaterialTheme.typography.labelLarge)
                 Text(money(total), style = MaterialTheme.typography.headlineSmall)
             }
-            Button(
-                onClick = { checkout = true },
-                enabled = cart.isNotEmpty() && total >= 0
-            ) {
-                Text("Checkout")
+                Button(
+                    onClick = { checkout = true },
+                    enabled = cart.isNotEmpty() && total >= 0
+                ) {
+                    Text("Checkout")
+                }
             }
         }
     }
