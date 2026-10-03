@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -47,11 +48,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.tihloh.pos.data.AppDatabase
+import com.tihloh.pos.data.CustomerEntity
 import com.tihloh.pos.data.PosRepository
 import com.tihloh.pos.data.ProductEntity
 import com.tihloh.pos.scanner.BarcodeScannerView
 import com.tihloh.pos.security.PinStore
 import com.tihloh.pos.ui.screens.CartLine
+import com.tihloh.pos.ui.screens.CustomersScreen
 import com.tihloh.pos.ui.screens.InventoryScreen
 import com.tihloh.pos.ui.screens.MoreScreen
 import com.tihloh.pos.ui.screens.PosScreen
@@ -70,10 +73,11 @@ private enum class MainScreen(val title: String, val icon: ImageVector) {
     SALES("Sales", Icons.Default.ReceiptLong),
     INVENTORY("Inventory", Icons.Default.Inventory2),
     PRODUCTS("Products", Icons.Default.Storefront),
+    CUSTOMERS("Customers", Icons.Default.People),
     MORE("More", Icons.Default.MoreHoriz)
 }
 
-private enum class ScannerMode { POS, INVENTORY, PRODUCT }
+private enum class ScannerMode { POS, INVENTORY, PRODUCT, CUSTOMER, POS_CUSTOMER }
 
 @Composable
 fun PosRoot(
@@ -206,6 +210,8 @@ private fun MainShell(
     var posScannedProduct by remember { mutableStateOf<ProductEntity?>(null) }
     var inventoryScannedProduct by remember { mutableStateOf<ProductEntity?>(null) }
     var pendingProductBarcode by remember { mutableStateOf<String?>(null) }
+    var pendingCustomerBarcode by remember { mutableStateOf<String?>(null) }
+    var posScannedCustomer by remember { mutableStateOf<CustomerEntity?>(null) }
     var initialUpdateCheck by remember { mutableStateOf(true) }
     var autoInstallVersion by remember { mutableStateOf<String?>(null) }
 
@@ -308,6 +314,25 @@ private fun MainShell(
                     pendingProductBarcode = code
                     screen = MainScreen.PRODUCTS
                 }
+                ScannerMode.CUSTOMER -> {
+                    pendingCustomerBarcode = code
+                    screen = MainScreen.CUSTOMERS
+                }
+                ScannerMode.POS_CUSTOMER -> {
+                    val customer = repository.findCustomerByBarcode(code)
+                    if (customer != null) {
+                        posScannedCustomer = customer
+                        screen = MainScreen.POS
+                    } else {
+                        pendingCustomerBarcode = code
+                        screen = MainScreen.CUSTOMERS
+                        Toast.makeText(
+                            context,
+                            "Customer not found. Create an account for this barcode.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
             }
         }
     }
@@ -375,7 +400,7 @@ private fun MainShell(
         Scaffold(
         bottomBar = {
             NavigationBar {
-                MainScreen.entries.forEach { item ->
+                MainScreen.entries.filter { it != MainScreen.CUSTOMERS }.forEach { item ->
                     NavigationBarItem(
                         selected = screen == item,
                         onClick = { screen = item },
@@ -393,7 +418,10 @@ private fun MainShell(
                     cart = cart,
                     scannedProduct = posScannedProduct,
                     onScannedProductHandled = { posScannedProduct = null },
-                    onScanRequest = { scannerMode = ScannerMode.POS }
+                    scannedCustomer = posScannedCustomer,
+                    onScannedCustomerHandled = { posScannedCustomer = null },
+                    onProductScanRequest = { scannerMode = ScannerMode.POS },
+                    onCustomerScanRequest = { scannerMode = ScannerMode.POS_CUSTOMER }
                 )
                 MainScreen.SALES -> SalesScreen(repository)
                 MainScreen.INVENTORY -> InventoryScreen(
@@ -408,11 +436,19 @@ private fun MainShell(
                     onPendingBarcodeHandled = { pendingProductBarcode = null },
                     onScanRequest = { scannerMode = ScannerMode.PRODUCT }
                 )
+                MainScreen.CUSTOMERS -> CustomersScreen(
+                    repository = repository,
+                    pendingBarcode = pendingCustomerBarcode,
+                    onPendingBarcodeHandled = { pendingCustomerBarcode = null },
+                    onScanRequest = { scannerMode = ScannerMode.CUSTOMER },
+                    onBack = { screen = MainScreen.MORE }
+                )
                 MainScreen.MORE -> MoreScreen(
                     repository = repository,
                     checkUpdate = {
                         updateInfo = checker.check(force = true)
                     },
+                    onCustomers = { screen = MainScreen.CUSTOMERS },
                     themeMode = themeMode,
                     onThemeModeChange = onThemeModeChange
                 )
