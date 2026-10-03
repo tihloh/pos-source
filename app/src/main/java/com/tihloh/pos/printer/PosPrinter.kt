@@ -18,11 +18,26 @@ data class ReceiptData(
     val paymentType: String,
     val amountPaidCents: Long,
     val changeCents: Long,
-    val timestamp: Long
+    val timestamp: Long,
+    val storeName: String = "POS",
+    val receiptTemplate: String = DEFAULT_RECEIPT_TEMPLATE
 )
+
+const val DEFAULT_RECEIPT_TEMPLATE = """{store}
+Receipt {receipt}
+{datetime}
+--------------------------------
+{items}
+--------------------------------
+Subtotal: {subtotal}
+Discount: {discount}
+TOTAL: {total}
+Payment: {payment}
+Paid: {paid}
+Change: {change}
+
+Thank you!"""
 
 interface PosPrinter {
     suspend fun print(receipt: ReceiptData): Result<Unit>
 }
-
-// ESC/POS Bluetooth, USB and TCP implementations will implement PosPrinter.
