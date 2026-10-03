@@ -4,7 +4,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,8 +15,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -25,7 +22,6 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -209,15 +205,9 @@ fun ProductsScreen(
                 items(filtered, key = { it.id }) { product ->
                     ProductRow(
                         product = product,
-                        onEdit = {
+                        onClick = {
                             scope.launch {
                                 editor = product.toDraft(repository.supplierIdsForProduct(product.id))
-                            }
-                        },
-                        onArchive = {
-                            scope.launch {
-                                runCatching { repository.archiveProduct(product.id) }
-                                    .onFailure { error = it.message }
                             }
                         }
                     )
@@ -232,6 +222,15 @@ fun ProductsScreen(
             onDismiss = { editor = null },
             onScanRequest = onScanRequest,
             suppliers = suppliers,
+            onDelete = if (draft.id == 0L) null else {
+                {
+                    scope.launch {
+                        runCatching { repository.archiveProduct(draft.id) }
+                            .onSuccess { editor = null }
+                            .onFailure { error = it.message ?: "Unable to delete product." }
+                    }
+                }
+            },
             onSave = { updated ->
                 error = null
                 scope.launch {
@@ -273,25 +272,30 @@ fun ProductsScreen(
 @Composable
 private fun ProductRow(
     product: ProductEntity,
-    onEdit: () -> Unit,
-    onArchive: () -> Unit
+    onClick: () -> Unit
 ) {
-    Card(Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(112.dp),
+        onClick = onClick
+    ) {
         Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min)
-                .padding(12.dp),
+                .fillMaxSize()
+                .padding(10.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             ProductThumbnail(
                 imageUrl = product.imageUrl,
-                width = 96.dp
+                width = 92.dp
             )
 
             Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxSize(),
+                verticalArrangement = Arrangement.Center
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -304,7 +308,8 @@ private fun ProductRow(
                             listOfNotNull(product.barcode, product.sku)
                                 .joinToString(" · ")
                                 .ifBlank { "No barcode" },
-                            style = MaterialTheme.typography.bodySmall
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     Text(
@@ -313,22 +318,14 @@ private fun ProductRow(
                     )
                 }
 
+                Spacer(Modifier.height(6.dp))
                 val stockText = if (product.inventoryEnabled) {
                     "Stock: ${quantity(product.stockCache)} ${product.unit}"
                 } else "Non-inventory item"
-                Text("$stockText · ${product.itemType}")
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    IconButton(onClick = onEdit) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit")
-                    }
-                    IconButton(onClick = onArchive) {
-                        Icon(Icons.Default.DeleteOutline, contentDescription = "Archive")
-                    }
-                }
+                Text(
+                    "$stockText · ${product.itemType}",
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         }
     }
@@ -340,6 +337,7 @@ private fun ProductEditorDialog(
     onDismiss: () -> Unit,
     onScanRequest: () -> Unit,
     suppliers: List<SupplierEntity>,
+    onDelete: (() -> Unit)?,
     onSave: (ProductDraft) -> Unit
 ) {
     var draft by remember(initial) { mutableStateOf(initial) }
@@ -467,7 +465,14 @@ private fun ProductEditorDialog(
             }
         },
         dismissButton = {
-            OutlinedButton(onClick = onDismiss) { Text("Cancel") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (onDelete != null) {
+                    OutlinedButton(onClick = onDelete) {
+                        Text("Delete", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                OutlinedButton(onClick = onDismiss) { Text("Cancel") }
+            }
         }
     )
 }
