@@ -33,8 +33,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.tihloh.pos.data.PosRepository
 import com.tihloh.pos.data.SaleDetail
-import com.tihloh.pos.printer.PrinterSettings
-import com.tihloh.pos.printer.TcpEscPosPrinter
+import com.tihloh.pos.printer.ReceiptPrinter
 import com.tihloh.pos.printer.toReceiptData
 import com.tihloh.pos.ui.money
 import com.tihloh.pos.ui.quantity
@@ -208,27 +207,18 @@ fun SalesScreen(repository: PosRepository) {
             confirmButton = {
                 Button(onClick = {
                     scope.launch {
-                        val cfg = PrinterSettings(context).load()
-                        if (!cfg.enabled || cfg.host.isBlank()) {
-                            Toast.makeText(
-                                context,
-                                "Configure the network receipt printer in More.",
-                                Toast.LENGTH_LONG
-                            ).show()
-                        } else {
-                            TcpEscPosPrinter(cfg.host, cfg.port)
-                                .print(saleDetail.toReceiptData())
-                                .onSuccess {
-                                    Toast.makeText(context, "Receipt printed.", Toast.LENGTH_SHORT).show()
-                                }
-                                .onFailure {
-                                    Toast.makeText(
-                                        context,
-                                        it.message ?: "Printing failed.",
-                                        Toast.LENGTH_LONG
-                                    ).show()
-                                }
-                        }
+                        ReceiptPrinter(context)
+                            .print(saleDetail.toReceiptData())
+                            .onSuccess {
+                                Toast.makeText(context, "Receipt printed.", Toast.LENGTH_SHORT).show()
+                            }
+                            .onFailure {
+                                Toast.makeText(
+                                    context,
+                                    it.message ?: "Printing failed.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
                     }
                 }) { Text("Print") }
             },
