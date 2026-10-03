@@ -61,7 +61,11 @@ fun SalesScreen(repository: PosRepository) {
                             }
                         }
                     ) {
-                        Row(Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(14.dp),
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
                             Column(Modifier.weight(1f)) {
                                 Text(sale.receiptNumber, style = MaterialTheme.typography.titleMedium)
                                 Text(
@@ -71,9 +75,13 @@ fun SalesScreen(repository: PosRepository) {
                                     ).format(Date(sale.createdAt))
                                 )
                             }
-                            Column {
+                            Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
                                 Text(money(sale.totalCents), style = MaterialTheme.typography.titleMedium)
-                                Text("Change ${money(sale.changeCents)}")
+                                Text(
+                                    "Change ${money(sale.changeCents)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     }
