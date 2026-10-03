@@ -3,6 +3,7 @@ package com.tihloh.pos.ui.screens
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -135,13 +136,16 @@ fun PosScreen(
                 items(filtered, key = { it.id }) { product ->
                     Card(Modifier.fillMaxWidth()) {
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(IntrinsicSize.Min)
+                                .padding(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             ProductThumbnail(
                                 imageUrl = product.imageUrl,
-                                size = 70.dp
+                                width = 88.dp
                             )
                             Column(Modifier.weight(1f)) {
                                 Text(product.name, style = MaterialTheme.typography.titleSmall)
@@ -184,13 +188,15 @@ fun PosScreen(
                 items(cart, key = { it.product.id }) { line ->
                     Card(Modifier.fillMaxWidth()) {
                         Row(
-                            Modifier.padding(10.dp),
+                            Modifier
+                                .height(IntrinsicSize.Min)
+                                .padding(10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             ProductThumbnail(
                                 imageUrl = line.product.imageUrl,
-                                size = 62.dp
+                                width = 78.dp
                             )
                             Column(Modifier.weight(1f)) {
                                 Text(line.product.name, style = MaterialTheme.typography.titleMedium)
