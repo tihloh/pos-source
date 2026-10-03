@@ -54,11 +54,11 @@ object PhilSysQrParser {
             // subject and a digital signature. Presence is used only for format
             // detection here; this parser does not claim cryptographic verification.
             if (!issuer.equals("PSA", ignoreCase = true) ||
-                alg.isNullOrBlank() ||
+                !alg.equals("EDDSA", ignoreCase = true) ||
                 signature.isBlank()
             ) {
                 return PhilSysParseResult.Invalid(
-                    "The QR does not match the expected PhilSys signed-data structure."
+                    "The QR does not match the expected PSA PhilSys EDDSA signed-data structure."
                 )
             }
 
