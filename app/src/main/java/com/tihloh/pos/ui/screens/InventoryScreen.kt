@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.tihloh.pos.data.InventoryTransactionEntity
 import com.tihloh.pos.data.PosRepository
 import com.tihloh.pos.data.ProductEntity
 import com.tihloh.pos.ui.ScanTextField
@@ -43,6 +44,7 @@ fun InventoryScreen(
     onScanRequest: () -> Unit
 ) {
     val products by repository.products.collectAsState(initial = emptyList())
+    val transactions by repository.inventoryTransactions.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     var selected by remember { mutableStateOf<ProductEntity?>(null) }
     var query by remember { mutableStateOf("") }
@@ -50,23 +52,21 @@ fun InventoryScreen(
 
     LaunchedEffect(scannedProduct?.id) {
         if (scannedProduct != null) {
-            query = scannedProduct.barcode
-                ?: scannedProduct.sku
-                ?: scannedProduct.name
+            query = scannedProduct.barcode ?: scannedProduct.sku ?: scannedProduct.name
             onScannedProductHandled()
         }
     }
 
     val filtered = remember(products, query) {
-        products
-            .filter { it.inventoryEnabled }
-            .filter {
-                query.isBlank() ||
-                    it.name.contains(query, ignoreCase = true) ||
-                    it.barcode.orEmpty().contains(query, ignoreCase = true) ||
-                    it.sku.orEmpty().contains(query, ignoreCase = true)
-            }
+        products.filter { it.inventoryEnabled }.filter {
+            query.isBlank() ||
+                it.name.contains(query, ignoreCase = true) ||
+                it.barcode.orEmpty().contains(query, ignoreCase = true) ||
+                it.sku.orEmpty().contains(query, ignoreCase = true)
+        }
     }
+
+    val ledgerByProduct = remember(transactions) { transactions.groupBy { it.productId } }
 
     Column(
         Modifier.fillMaxSize().padding(16.dp),
@@ -74,10 +74,11 @@ fun InventoryScreen(
     ) {
         Text("Inventory", style = MaterialTheme.typography.headlineMedium)
         Text(
-            "Find stock quickly, then adjust only when needed.",
+            "Beginning + Added = Ending balance",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+
         ScanTextField(
             value = query,
             onValueChange = { query = it },
@@ -90,28 +91,17 @@ fun InventoryScreen(
             Text("No matching inventory item.")
         }
 
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             items(filtered, key = { it.id }) { product ->
-                Card(Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(product.name, style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                product.barcode ?: product.sku ?: "No barcode",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text("Stock: ${quantity(product.stockCache)} ${product.unit}")
-                        }
-                        Button(onClick = { selected = product }) {
-                            Text("Adjust")
-                        }
-                    }
-                }
+                val ledger = ledgerByProduct[product.id].orEmpty()
+                InventoryRow(
+                    product = product,
+                    ledger = ledger,
+                    onAdjust = { selected = product }
+                )
             }
         }
     }
@@ -123,8 +113,7 @@ fun InventoryScreen(
             onApply = { mode, qty, note ->
                 scope.launch {
                     val delta = when (mode) {
-                        "RECEIVE" -> qty
-                        "ADD" -> qty
+                        "RECEIVE", "ADD" -> qty
                         "REMOVE" -> -qty
                         "COUNT" -> qty - product.stockCache
                         else -> 0.0
@@ -144,6 +133,74 @@ fun InventoryScreen(
 }
 
 @Composable
+private fun InventoryRow(
+    product: ProductEntity,
+    ledger: List<InventoryTransactionEntity>,
+    onAdjust: () -> Unit
+) {
+    val beginning = ledger.filter { it.type == "OPENING" }.sumOf { it.quantityDelta }
+    val added = ledger.filter { it.type != "OPENING" && it.quantityDelta > 0 }
+        .sumOf { it.quantityDelta }
+
+    Card(Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(product.name, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        product.barcode ?: product.sku ?: "No barcode",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Button(onClick = onAdjust) { Text("Adjust") }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                BalanceMetric(
+                    label = "Beginning",
+                    value = quantity(beginning),
+                    modifier = Modifier.weight(1f)
+                )
+                BalanceMetric(
+                    label = "Added",
+                    value = quantity(added),
+                    modifier = Modifier.weight(1f)
+                )
+                BalanceMetric(
+                    label = "Ending",
+                    value = quantity(product.stockCache),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BalanceMetric(label: String, value: String, modifier: Modifier = Modifier) {
+    Card(modifier) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(label, style = MaterialTheme.typography.labelSmall)
+            Text(value, style = MaterialTheme.typography.titleMedium)
+        }
+    }
+}
+
+@Composable
 private fun StockDialog(
     product: ProductEntity,
     onDismiss: () -> Unit,
@@ -155,43 +212,89 @@ private fun StockDialog(
     val parsed = qty.toDoubleOrNull()
     val valid = parsed != null && parsed >= 0 && !(mode != "COUNT" && parsed == 0.0)
 
+    val result = when {
+        parsed == null -> product.stockCache
+        mode == "COUNT" -> parsed
+        mode == "REMOVE" -> product.stockCache - parsed
+        else -> product.stockCache + parsed
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(product.name) },
+        title = { Text("Adjust inventory") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Current: ${quantity(product.stockCache)} ${product.unit}")
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf(
-                        "RECEIVE" to "Receive",
-                        "ADD" to "Add",
-                        "REMOVE" to "Remove",
-                        "COUNT" to "Count"
-                    ).forEach { (value, label) ->
-                        FilterChip(
-                            selected = mode == value,
-                            onClick = { mode = value },
-                            label = { Text(label) }
-                        )
-                    }
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(product.name, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Current balance: ${quantity(product.stockCache)} ${product.unit}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = mode == "RECEIVE",
+                        onClick = { mode = "RECEIVE" },
+                        label = { Text("Receive") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = mode == "ADD",
+                        onClick = { mode = "ADD" },
+                        label = { Text("Add") },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = mode == "REMOVE",
+                        onClick = { mode = "REMOVE" },
+                        label = { Text("Remove") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = mode == "COUNT",
+                        onClick = { mode = "COUNT" },
+                        label = { Text("Physical count") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
                 OutlinedTextField(
                     value = qty,
-                    onValueChange = { qty = it },
-                    label = {
-                        Text(if (mode == "COUNT") "Physical count" else "Quantity")
-                    },
+                    onValueChange = { qty = it.filter { ch -> ch.isDigit() || ch == '.' } },
+                    label = { Text(if (mode == "COUNT") "New physical count" else "Quantity") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
-                if (mode == "COUNT" && parsed != null) {
-                    Text("Variance: ${quantity(parsed - product.stockCache)}")
+
+                if (parsed != null) {
+                    Card(Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(if (mode == "COUNT") "Variance" else "Ending balance")
+                            Text(
+                                if (mode == "COUNT") quantity(parsed - product.stockCache)
+                                else quantity(result),
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                    }
                 }
+
                 OutlinedTextField(
                     value = note,
                     onValueChange = { note = it },
                     label = { Text("Note (optional)") },
+                    minLines = 2,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -199,7 +302,7 @@ private fun StockDialog(
         confirmButton = {
             Button(
                 onClick = { onApply(mode, parsed ?: 0.0, note.ifBlank { null }) },
-                enabled = valid
+                enabled = valid && result >= -0.000001
             ) { Text("Apply") }
         },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } }
