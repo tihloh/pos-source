@@ -24,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -197,6 +198,7 @@ private fun MainShell() {
     var posScannedProduct by remember { mutableStateOf<ProductEntity?>(null) }
     var inventoryScannedProduct by remember { mutableStateOf<ProductEntity?>(null) }
     var pendingProductBarcode by remember { mutableStateOf<String?>(null) }
+    var initialUpdateCheck by remember { mutableStateOf(true) }
 
     fun installUpdate(info: UpdateInfo) {
         if (installingUpdate) return
@@ -209,7 +211,7 @@ private fun MainShell() {
                         "Update ready. Confirm the Android install prompt.",
                         Toast.LENGTH_LONG
                     ).show()
-                    updateInfo = null
+                    // Keep the mandatory update visible if the Android installer is cancelled.
                 }
                 .onFailure {
                     Toast.makeText(
@@ -240,7 +242,8 @@ private fun MainShell() {
     }
 
     LaunchedEffect(Unit) {
-        updateInfo = checker.check()
+        updateInfo = checker.check(force = true)
+        initialUpdateCheck = false
     }
 
     fun handleBarcode(activeMode: ScannerMode, code: String) {
@@ -285,9 +288,7 @@ private fun MainShell() {
 
     updateInfo?.let { info ->
         AlertDialog(
-            onDismissRequest = {
-                if (!installingUpdate) updateInfo = null
-            },
+            onDismissRequest = { },
             title = { Text("Update available: ${info.version}") },
             text = {
                 Column {
@@ -329,17 +330,24 @@ private fun MainShell() {
                 ) {
                     Text(if (installingUpdate) "Preparing…" else "Install update")
                 }
-            },
-            dismissButton = {
-                TextButton(
-                    enabled = !installingUpdate,
-                    onClick = { updateInfo = null }
-                ) { Text("Later") }
             }
         )
     }
 
     Box(Modifier.fillMaxSize()) {
+        if (initialUpdateCheck) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center
+            ) {
+                CircularProgressIndicator()
+                Spacer(Modifier.height(16.dp))
+                Text("Checking for required updates…")
+            }
+            return@Box
+        }
+
         Scaffold(
         bottomBar = {
             NavigationBar {
