@@ -41,6 +41,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.tihloh.pos.data.PosRepository
 import com.tihloh.pos.data.ProductEntity
+import com.tihloh.pos.data.SupplierEntity
 import com.tihloh.pos.product.ProductLookupOutcome
 import com.tihloh.pos.product.ProductLookupService
 import com.tihloh.pos.ui.NetworkImage
@@ -65,7 +66,8 @@ private data class ProductDraft(
     val price: String = "",
     val unit: String = "pc",
     val openingStock: String = "",
-    val stockCache: Double = 0.0
+    val stockCache: Double = 0.0,
+    val supplierIds: List<Long> = emptyList()
 )
 
 @Composable
@@ -76,6 +78,7 @@ fun ProductsScreen(
     onScanRequest: () -> Unit
 ) {
     val products by repository.products.collectAsState(initial = emptyList())
+    val suppliers by repository.suppliers.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     val lookup = remember { ProductLookupService() }
     var search by remember { mutableStateOf("") }
@@ -93,7 +96,7 @@ fun ProductsScreen(
             val currentDraft = editor
             val existing = repository.findByBarcode(barcode)
             if (existing != null && currentDraft == null) {
-                editor = existing.toDraft()
+                editor = existing.toDraft(repository.supplierIdsForProduct(existing.id))
                 lookupStatus = "Product already exists locally."
             } else if (existing != null) {
                 editor = currentDraft!!.copy(barcode = barcode)
@@ -200,7 +203,11 @@ fun ProductsScreen(
                 items(filtered, key = { it.id }) { product ->
                     ProductRow(
                         product = product,
-                        onEdit = { editor = product.toDraft() },
+                        onEdit = {
+                            scope.launch {
+                                editor = product.toDraft(repository.supplierIdsForProduct(product.id))
+                            }
+                        },
                         onArchive = {
                             scope.launch {
                                 runCatching { repository.archiveProduct(product.id) }
@@ -218,6 +225,7 @@ fun ProductsScreen(
             initial = draft,
             onDismiss = { editor = null },
             onScanRequest = onScanRequest,
+            suppliers = suppliers,
             onSave = { updated ->
                 error = null
                 scope.launch {
@@ -244,7 +252,8 @@ fun ProductsScreen(
                                 unit = updated.unit.ifBlank { "pc" },
                                 stockCache = updated.stockCache
                             ),
-                            openingQuantity = updated.openingStock.toDoubleOrNull() ?: 0.0
+                            openingQuantity = updated.openingStock.toDoubleOrNull() ?: 0.0,
+                            supplierIds = updated.supplierIds
                         )
                     }
                     result.onSuccess { editor = null }
@@ -306,6 +315,7 @@ private fun ProductEditorDialog(
     initial: ProductDraft,
     onDismiss: () -> Unit,
     onScanRequest: () -> Unit,
+    suppliers: List<SupplierEntity>,
     onSave: (ProductDraft) -> Unit
 ) {
     var draft by remember(initial) { mutableStateOf(initial) }
@@ -354,6 +364,28 @@ private fun ProductEditorDialog(
                     }
                 }
                 item { Field("Unit", draft.unit) { draft = draft.copy(unit = it) } }
+                if (suppliers.isNotEmpty()) {
+                    item {
+                        Text("Suppliers", style = MaterialTheme.typography.titleSmall)
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            suppliers.forEach { supplier ->
+                                FilterChip(
+                                    selected = supplier.id in draft.supplierIds,
+                                    onClick = {
+                                        draft = draft.copy(
+                                            supplierIds = if (supplier.id in draft.supplierIds) {
+                                                draft.supplierIds - supplier.id
+                                            } else {
+                                                draft.supplierIds + supplier.id
+                                            }
+                                        )
+                                    },
+                                    label = { Text(supplier.name) }
+                                )
+                            }
+                        }
+                    }
+                }
                 item {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(
@@ -409,7 +441,7 @@ private fun Field(
     )
 }
 
-private fun ProductEntity.toDraft() = ProductDraft(
+private fun ProductEntity.toDraft(supplierIds: List<Long> = emptyList()) = ProductDraft(
     id = id,
     barcode = barcode.orEmpty(),
     sku = sku.orEmpty(),
@@ -423,5 +455,6 @@ private fun ProductEntity.toDraft() = ProductDraft(
     cost = if (costCents == 0L) "" else (costCents / 100.0).toString(),
     price = if (sellingPriceCents == 0L) "" else (sellingPriceCents / 100.0).toString(),
     unit = unit,
-    stockCache = stockCache
+    stockCache = stockCache,
+    supplierIds = supplierIds
 )
