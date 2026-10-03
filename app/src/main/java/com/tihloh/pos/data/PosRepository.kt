@@ -23,8 +23,31 @@ class PosRepository(private val db: AppDatabase) {
     val suppliers = db.suppliers().observeAll()
     val inventoryTransactions = db.inventory().observeAll()
 
-    suspend fun findByBarcode(barcode: String): ProductEntity? =
-        db.products().findByBarcode(barcode.trim())
+    suspend fun findByBarcode(barcode: String): ProductEntity? {
+        val raw = barcode.trim()
+        if (raw.isBlank()) return null
+
+        val compact = raw.filterNot(Char::isWhitespace)
+        val candidates = linkedSetOf(raw, compact)
+
+        // UPC-A scanners and EAN-13 databases commonly differ only by a leading zero.
+        if (compact.all(Char::isDigit)) {
+            if (compact.length == 12) candidates += "0$compact"
+            if (compact.length == 13 && compact.startsWith("0")) candidates += compact.drop(1)
+        }
+
+        for (candidate in candidates) {
+            db.products().findByBarcode(candidate)?.let { return it }
+        }
+
+        // Final normalized fallback for data imported with formatting characters/spaces.
+        return db.products().getAllActive().firstOrNull { product ->
+            val saved = product.barcode.orEmpty().filterNot(Char::isWhitespace)
+            saved == compact ||
+                (compact.all(Char::isDigit) && saved.all(Char::isDigit) &&
+                    saved.trimStart('0') == compact.trimStart('0'))
+        }
+    }
 
     suspend fun saveProduct(
         product: ProductEntity,
