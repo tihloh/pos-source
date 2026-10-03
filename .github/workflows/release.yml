@@ -1,6 +1,10 @@
 name: Release APK
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.release-version'
   workflow_dispatch:
     inputs:
       versionName:
@@ -28,9 +32,6 @@ jobs:
   release:
     runs-on: ubuntu-latest
     env:
-      VERSION_NAME: ${{ inputs.versionName }}
-      VERSION_CODE: ${{ inputs.versionCode }}
-      RELEASE_NOTES: ${{ inputs.releaseNotes }}
       STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -39,6 +40,32 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION_NAME="${{ inputs.versionName }}"
+            VERSION_CODE="${{ inputs.versionCode }}"
+            RELEASE_NOTES="${{ inputs.releaseNotes }}"
+            PRERELEASE="${{ inputs.prerelease }}"
+          else
+            VERSION_NAME="$(grep '^VERSION_NAME=' .release-version | cut -d= -f2-)"
+            VERSION_CODE="$(grep '^VERSION_CODE=' .release-version | cut -d= -f2-)"
+            RELEASE_NOTES=""
+            PRERELEASE="false"
+          fi
+          test -n "$VERSION_NAME" || (echo "Missing VERSION_NAME" && exit 1)
+          test -n "$VERSION_CODE" || (echo "Missing VERSION_CODE" && exit 1)
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+          {
+            echo "release_notes<<EOF"
+            printf '%s\n' "$RELEASE_NOTES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Set up JDK 17
         uses: actions/setup-java@v6
@@ -76,8 +103,8 @@ jobs:
         shell: bash
         run: |
           gradle :app:assembleRelease --stacktrace \
-            -PVERSION_NAME="$VERSION_NAME" \
-            -PVERSION_CODE="$VERSION_CODE" \
+            -PVERSION_NAME="${{ steps.meta.outputs.version_name }}" \
+            -PVERSION_CODE="${{ steps.meta.outputs.version_code }}" \
             -PGITHUB_REPO="${{ github.repository }}" \
             -PSIGNING_STORE_FILE="$RUNNER_TEMP/pos-release.jks" \
             -PSIGNING_STORE_PASSWORD="$STORE_PASSWORD" \
@@ -88,17 +115,18 @@ jobs:
         id: apk
         shell: bash
         run: |
-          APK="POS-v${VERSION_NAME}.apk"
+          APK="POS-v${{ steps.meta.outputs.version_name }}.apk"
           cp app/build/outputs/apk/release/app-release.apk "$APK"
           echo "path=$APK" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         shell: bash
         run: |
-          TAG="v${VERSION_NAME}"
+          TAG="v${{ steps.meta.outputs.version_name }}"
           APK="${{ steps.apk.outputs.path }}"
+          RELEASE_NOTES="${{ steps.meta.outputs.release_notes }}"
           EXTRA=()
-          if [ "${{ inputs.prerelease }}" = "true" ]; then EXTRA+=(--prerelease); fi
+          if [ "${{ steps.meta.outputs.prerelease }}" = "true" ]; then EXTRA+=(--prerelease); fi
 
           if [ -n "$RELEASE_NOTES" ]; then
             printf '%s\n' "$RELEASE_NOTES" > release-notes.md
