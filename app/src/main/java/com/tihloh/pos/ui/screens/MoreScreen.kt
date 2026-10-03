@@ -54,6 +54,7 @@ import com.tihloh.pos.data.SupplierEntity
 import com.tihloh.pos.printer.BluetoothEscPosPrinter
 import com.tihloh.pos.printer.BluetoothPrinterSupport
 import com.tihloh.pos.printer.PairedPrinter
+import com.tihloh.pos.printer.DEFAULT_RECEIPT_TEMPLATE
 import com.tihloh.pos.printer.PrinterConfig
 import com.tihloh.pos.printer.PrinterSettings
 import com.tihloh.pos.printer.ReceiptData
@@ -318,7 +319,9 @@ fun MoreScreen(
                         paymentType = "TEST",
                         amountPaidCents = 0,
                         changeCents = 0,
-                        timestamp = System.currentTimeMillis()
+                        timestamp = System.currentTimeMillis(),
+                        storeName = cfg.storeName,
+                        receiptTemplate = cfg.receiptTemplate
                     )
                     val result = if (cfg.connectionType == "BLUETOOTH") {
                         BluetoothEscPosPrinter(context, cfg.bluetoothAddress).print(testReceipt)
@@ -411,6 +414,8 @@ private fun PrinterDialog(
     var port by remember(initial) { mutableStateOf(initial.port.toString()) }
     var bluetoothAddress by remember(initial) { mutableStateOf(initial.bluetoothAddress) }
     var bluetoothName by remember(initial) { mutableStateOf(initial.bluetoothName) }
+    var storeName by remember(initial) { mutableStateOf(initial.storeName) }
+    var receiptTemplate by remember(initial) { mutableStateOf(initial.receiptTemplate) }
 
     val cfg = PrinterConfig(
         enabled = enabled,
@@ -418,7 +423,9 @@ private fun PrinterDialog(
         host = host.trim(),
         port = port.toIntOrNull() ?: 9100,
         bluetoothAddress = bluetoothAddress,
-        bluetoothName = bluetoothName
+        bluetoothName = bluetoothName,
+        storeName = storeName.trim().ifBlank { "POS" },
+        receiptTemplate = receiptTemplate.ifBlank { DEFAULT_RECEIPT_TEMPLATE }
     )
 
     AlertDialog(
@@ -524,14 +531,53 @@ private fun PrinterDialog(
                     }
                 }
                 item {
-                    OutlinedButton(
-                        onClick = { onTest(cfg) },
-                        enabled = when (connectionType) {
-                            "BLUETOOTH" -> bluetoothAddress.isNotBlank()
-                            else -> host.isNotBlank()
-                        },
+                    Text("Receipt", style = MaterialTheme.typography.titleMedium)
+                }
+                item {
+                    OutlinedTextField(
+                        value = storeName,
+                        onValueChange = { storeName = it },
+                        label = { Text("Store name") },
+                        singleLine = true,
                         modifier = Modifier.fillMaxWidth()
-                    ) { Text("Print test receipt") }
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value = receiptTemplate,
+                        onValueChange = { receiptTemplate = it },
+                        label = { Text("Receipt template") },
+                        minLines = 10,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    Text(
+                        "Placeholders: {store}, {receipt}, {date}, {time}, {datetime}, " +
+                            "{items}, {item_count}, {subtotal}, {discount}, {total}, " +
+                            "{payment}, {paid}, {change}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { receiptTemplate = DEFAULT_RECEIPT_TEMPLATE },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Reset template") }
+                        OutlinedButton(
+                            onClick = { onTest(cfg) },
+                            enabled = when (connectionType) {
+                                "BLUETOOTH" -> bluetoothAddress.isNotBlank()
+                                else -> host.isNotBlank()
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("Test print") }
+                    }
                 }
             }
         },
