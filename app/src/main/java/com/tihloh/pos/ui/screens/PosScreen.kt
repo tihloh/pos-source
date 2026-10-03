@@ -324,7 +324,7 @@ fun PosScreen(
             totalCents = total,
             customer = selectedCustomer,
             onDismiss = { checkout = false },
-            onCheckout = { paymentType, amountPaid, reference, careOf ->
+            onCheckout = { paymentType, amountPaid, reference ->
                 scope.launch {
                     runCatching {
                         repository.checkout(
@@ -332,8 +332,7 @@ fun PosScreen(
                             paymentType = paymentType,
                             amountPaidCents = amountPaid,
                             paymentReference = reference,
-                            customerId = selectedCustomer?.id,
-                            careOf = careOf
+                            customerId = selectedCustomer?.id
                         )
                     }.onSuccess {
                         completedSale = it
@@ -378,7 +377,14 @@ fun PosScreen(
                     Spacer(Modifier.height(4.dp))
                     Text("Total: ${money(detail.sale.totalCents)}")
                     Text("Paid: ${money(detail.sale.amountPaidCents)}")
-                    Text("Change: ${money(detail.sale.changeCents)}")
+                    if (detail.sale.status == "ACCOUNT_PAYABLE") {
+                        Text(
+                            "Account Payable: " +
+                                money(detail.sale.totalCents - detail.sale.amountPaidCents)
+                        )
+                    } else {
+                        Text("Change: ${money(detail.sale.changeCents)}")
+                    }
                 }
             },
             confirmButton = {
@@ -471,17 +477,24 @@ private fun CheckoutDialog(
     onCheckout: (
         paymentType: String,
         amountPaidCents: Long,
-        reference: String?,
-        careOf: String?
+        reference: String?
     ) -> Unit
 ) {
     var paymentType by remember { mutableStateOf("Cash") }
     var amount by remember(totalCents) { mutableStateOf("") }
     var reference by remember { mutableStateOf("") }
-    var careOf by remember(customer?.id) { mutableStateOf(customer?.careOf.orEmpty()) }
-    val paid = parseMoneyToCents(amount)
-    val valid = paid != null && paid >= totalCents
-    val change = if (paid != null && paid >= totalCents) paid - totalCents else 0
+    val isAccountPayable = paymentType == "Account Payable"
+    val paid = if (isAccountPayable) 0L else parseMoneyToCents(amount)
+    val valid = if (isAccountPayable) {
+        customer != null
+    } else {
+        paid != null && paid >= totalCents
+    }
+    val change = if (!isAccountPayable && paid != null && paid >= totalCents) {
+        paid - totalCents
+    } else {
+        0L
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -513,20 +526,6 @@ private fun CheckoutDialog(
                     }
                 }
 
-                OutlinedTextField(
-                    value = careOf,
-                    onValueChange = { careOf = it },
-                    label = { Text("Care of") },
-                    supportingText = {
-                        Text(
-                            if (customer == null) "Optional C/O for this walk-in sale."
-                            else "Optional for this sale."
-                        )
-                    },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
                 Text("Payment method", style = MaterialTheme.typography.labelLarge)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -545,7 +544,7 @@ private fun CheckoutDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    listOf("Maya", "Card").forEach { type ->
+                    listOf("Maya", "Card", "Account Payable").forEach { type ->
                         FilterChip(
                             selected = paymentType == type,
                             onClick = { paymentType = type },
@@ -555,35 +554,60 @@ private fun CheckoutDialog(
                     }
                 }
 
-                OutlinedTextField(
-                    value = amount,
-                    onValueChange = { amount = it.filter { ch -> ch.isDigit() || ch == '.' } },
-                    label = { Text("Payment amount") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                if (isAccountPayable) {
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                            Text("Account Payable", style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                if (customer == null) {
+                                    "Select a registered customer before saving this sale."
+                                } else {
+                                    "The full amount will be recorded as unpaid for ${customer.name}."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (customer == null) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
+                            Text(
+                                "Balance due: ${money(totalCents)}",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                    }
+                } else {
+                    OutlinedTextField(
+                        value = amount,
+                        onValueChange = { amount = it.filter { ch -> ch.isDigit() || ch == '.' } },
+                        label = { Text("Payment amount") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = { amount = "%.2f".format(totalCents / 100.0) },
-                        modifier = Modifier.weight(1f)
-                    ) { Text("Exact") }
-                    if (paymentType == "Cash") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         OutlinedButton(
-                            onClick = {
-                                val current = parseMoneyToCents(amount) ?: 0L
-                                amount = "%.2f".format((current + 10000) / 100.0)
-                            },
+                            onClick = { amount = "%.2f".format(totalCents / 100.0) },
                             modifier = Modifier.weight(1f)
-                        ) { Text("+ ₱100") }
+                        ) { Text("Exact") }
+                        if (paymentType == "Cash") {
+                            OutlinedButton(
+                                onClick = {
+                                    val current = parseMoneyToCents(amount) ?: 0L
+                                    amount = "%.2f".format((current + 10000) / 100.0)
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) { Text("+ ₱100") }
+                        }
                     }
                 }
 
-                if (paymentType != "Cash") {
+                if (paymentType != "Cash" && !isAccountPayable) {
                     OutlinedTextField(
                         value = reference,
                         onValueChange = { reference = it },
@@ -593,18 +617,20 @@ private fun CheckoutDialog(
                     )
                 }
 
-                Card(Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Change")
-                        Text(
-                            money(change),
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
+                if (!isAccountPayable) {
+                    Card(Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Change")
+                            Text(
+                                money(change),
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
                     }
                 }
             }
@@ -615,12 +641,11 @@ private fun CheckoutDialog(
                     onCheckout(
                         paymentType,
                         paid ?: 0L,
-                        reference.ifBlank { null },
-                        careOf.ifBlank { null }
+                        reference.ifBlank { null }
                     )
                 },
                 enabled = valid
-            ) { Text("Pay & Save") }
+            ) { Text(if (isAccountPayable) "Save to Account" else "Pay & Save") }
         },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } }
     )
@@ -668,8 +693,7 @@ private fun CustomerPickerDialog(
                             Column(Modifier.fillMaxWidth().padding(10.dp)) {
                                 Text(customer.name, style = MaterialTheme.typography.titleSmall)
                                 Text(
-                                    customer.barcode +
-                                        (customer.careOf?.let { " · C/O $it" } ?: ""),
+                                    customer.barcode,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = if (selected?.id == customer.id) {
                                         MaterialTheme.colorScheme.primary
