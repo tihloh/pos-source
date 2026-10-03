@@ -54,8 +54,8 @@ interface InventoryDao {
 
 @Dao
 interface SalesDao {
-    @Query("SELECT * FROM SaleEntity ORDER BY createdAt DESC LIMIT :limit")
-    fun observeLatest(limit: Int = 100): Flow<List<SaleEntity>>
+    @Query("SELECT * FROM SaleEntity ORDER BY createdAt DESC")
+    fun observeLatest(): Flow<List<SaleEntity>>
 
     @Query("SELECT * FROM SaleEntity WHERE id = :saleId LIMIT 1")
     suspend fun getSale(saleId: Long): SaleEntity?
