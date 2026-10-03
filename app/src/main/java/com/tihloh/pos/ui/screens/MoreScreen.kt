@@ -52,11 +52,19 @@ fun MoreScreen(
         Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("More", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                "More",
+                style = MaterialTheme.typography.headlineMedium,
+                modifier = Modifier.weight(1f)
+            )
             Button(onClick = { adding = true }) {
                 Icon(Icons.Default.Add, contentDescription = null)
-                Text(" Supplier")
+                Text("Supplier")
             }
         }
 
@@ -80,8 +88,9 @@ fun MoreScreen(
                         Modifier.fillMaxWidth().clickable { editing = supplier }
                     ) {
                         Row(
-                            Modifier.padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            modifier = Modifier.fillMaxWidth().padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Column(Modifier.weight(1f)) {
                                 Text(supplier.name, style = MaterialTheme.typography.titleMedium)
