@@ -15,6 +15,9 @@ interface ProductDao {
     @Query("SELECT * FROM ProductEntity WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): ProductEntity?
 
+    @Query("SELECT * FROM ProductEntity WHERE active = 1 ORDER BY name")
+    suspend fun getAllActive(): List<ProductEntity>
+
     @Query("SELECT * FROM ProductEntity WHERE barcode = :barcode LIMIT 1")
     suspend fun findByBarcode(barcode: String): ProductEntity?
 
@@ -83,6 +86,9 @@ interface SupplierDao {
 
     @Query("SELECT * FROM SupplierEntity WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): SupplierEntity?
+
+    @Query("SELECT * FROM SupplierEntity WHERE active = 1 ORDER BY name")
+    suspend fun getAllActive(): List<SupplierEntity>
 
     @Insert
     suspend fun insert(supplier: SupplierEntity): Long
