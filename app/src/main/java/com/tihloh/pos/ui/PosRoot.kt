@@ -60,6 +60,8 @@ import com.tihloh.pos.ui.screens.SalesScreen
 import com.tihloh.pos.update.InternalUpdater
 import com.tihloh.pos.update.UpdateChecker
 import com.tihloh.pos.update.UpdateInfo
+import com.tihloh.pos.sync.CentralSyncClient
+import com.tihloh.pos.sync.SyncSettings
 import kotlinx.coroutines.launch
 
 private enum class MainScreen(val title: String, val icon: ImageVector) {
@@ -244,6 +246,11 @@ private fun MainShell() {
     LaunchedEffect(Unit) {
         updateInfo = checker.check(force = true)
         initialUpdateCheck = false
+
+        val syncConfig = SyncSettings(context.applicationContext).load()
+        if (syncConfig.enabled && syncConfig.baseUrl.isNotBlank()) {
+            CentralSyncClient(syncConfig).push(repository.syncSnapshot())
+        }
     }
 
     fun handleBarcode(activeMode: ScannerMode, code: String) {
