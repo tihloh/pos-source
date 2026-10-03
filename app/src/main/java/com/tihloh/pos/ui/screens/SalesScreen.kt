@@ -77,11 +77,16 @@ fun SalesScreen(repository: PosRepository) {
     val filtered = remember(allSales, selectedScope, query, from) {
         allSales.filter {
             it.createdAt >= from &&
-                (query.isBlank() || it.receiptNumber.contains(query, ignoreCase = true))
+                (
+                    query.isBlank() ||
+                        it.receiptNumber.contains(query, ignoreCase = true) ||
+                        it.customerName.orEmpty().contains(query, ignoreCase = true)
+                )
         }
     }
     val total = filtered.sumOf { it.totalCents }
     val paid = filtered.sumOf { it.amountPaidCents }
+    val outstanding = filtered.sumOf { (it.totalCents - it.amountPaidCents).coerceAtLeast(0L) }
 
     Column(
         Modifier.fillMaxSize().padding(16.dp),
@@ -105,7 +110,7 @@ fun SalesScreen(repository: PosRepository) {
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
-            label = { Text("Receipt search") },
+            label = { Text("Receipt / customer search") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
@@ -126,12 +131,25 @@ fun SalesScreen(repository: PosRepository) {
             }
         }
 
-        if (paid != total && filtered.isNotEmpty()) {
-            Text(
-                "Payments received: ${money(paid)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        if (filtered.isNotEmpty() && (paid != total || outstanding > 0L)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    "Payments received: ${money(paid)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                if (outstanding > 0L) {
+                    Text(
+                        "Outstanding: ${money(outstanding)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
         }
 
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -168,6 +186,21 @@ fun SalesScreen(repository: PosRepository) {
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                                sale.customerName?.let {
+                                    Text(
+                                        it,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                if (sale.status == "ACCOUNT_PAYABLE") {
+                                    Text(
+                                        "Account Payable · Due " +
+                                            money((sale.totalCents - sale.amountPaidCents).coerceAtLeast(0L)),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
                             }
                             Text(money(sale.totalCents), style = MaterialTheme.typography.titleMedium)
                         }
@@ -196,7 +229,17 @@ fun SalesScreen(repository: PosRepository) {
                         Spacer(Modifier.height(6.dp))
                         Text("Total: ${money(saleDetail.sale.totalCents)}")
                         Text("Paid: ${money(saleDetail.sale.amountPaidCents)}")
-                        Text("Change: ${money(saleDetail.sale.changeCents)}")
+                        if (saleDetail.sale.status == "ACCOUNT_PAYABLE") {
+                            Text(
+                                "Balance due: " +
+                                    money(
+                                        (saleDetail.sale.totalCents - saleDetail.sale.amountPaidCents)
+                                            .coerceAtLeast(0L)
+                                    )
+                            )
+                        } else {
+                            Text("Change: ${money(saleDetail.sale.changeCents)}")
+                        }
                         saleDetail.payments.firstOrNull()?.let {
                             Text("Payment: ${it.type}")
                             it.reference?.let { ref -> Text("Reference: $ref") }
