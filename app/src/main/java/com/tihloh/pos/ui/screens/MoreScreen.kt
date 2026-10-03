@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -70,6 +71,7 @@ import kotlinx.coroutines.launch
 fun MoreScreen(
     repository: PosRepository,
     checkUpdate: suspend () -> Unit,
+    onCustomers: () -> Unit,
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit
 ) {
@@ -164,6 +166,25 @@ fun MoreScreen(
                     Icon(Icons.Default.CloudSync, contentDescription = null)
                     Text("Central sync", style = MaterialTheme.typography.titleSmall)
                     Text("Local-first + online server", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onCustomers)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(Icons.Default.People, contentDescription = null)
+                Column(Modifier.weight(1f)) {
+                    Text("Customers", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Accounts, barcode lookup, and care of",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
         }
