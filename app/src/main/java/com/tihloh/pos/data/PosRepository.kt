@@ -4,6 +4,7 @@ import androidx.room.withTransaction
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.roundToLong
+import com.tihloh.pos.sync.SyncSnapshot
 
 data class SaleLineInput(
     val productId: Long,
@@ -209,6 +210,12 @@ class PosRepository(private val db: AppDatabase) {
 
     suspend fun salesRange(from: Long, to: Long): List<SaleEntity> =
         db.sales().getRange(from, to)
+
+    suspend fun syncSnapshot(): SyncSnapshot = SyncSnapshot(
+        products = db.products().getAllActive(),
+        suppliers = db.suppliers().getAllActive(),
+        sales = db.sales().getRange(0L, Long.MAX_VALUE)
+    )
 
     suspend fun saleDetail(saleId: Long): SaleDetail? {
         val sale = db.sales().getSale(saleId) ?: return null
