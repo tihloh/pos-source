@@ -77,7 +77,7 @@ private enum class MainScreen(val title: String, val icon: ImageVector) {
     MORE("More", Icons.Default.MoreHoriz)
 }
 
-private enum class ScannerMode { POS, INVENTORY, PRODUCT, CUSTOMER, POS_CUSTOMER }
+private enum class ScannerMode { POS, INVENTORY, PRODUCT, CUSTOMER, POS_CUSTOMER, PHILSYS_CUSTOMER }
 
 @Composable
 fun PosRoot(
@@ -211,6 +211,7 @@ private fun MainShell(
     var inventoryScannedProduct by remember { mutableStateOf<ProductEntity?>(null) }
     var pendingProductBarcode by remember { mutableStateOf<String?>(null) }
     var pendingCustomerBarcode by remember { mutableStateOf<String?>(null) }
+    var pendingPhilSysQr by remember { mutableStateOf<String?>(null) }
     var posScannedCustomer by remember { mutableStateOf<CustomerEntity?>(null) }
     var initialUpdateCheck by remember { mutableStateOf(true) }
     var autoInstallVersion by remember { mutableStateOf<String?>(null) }
@@ -333,6 +334,10 @@ private fun MainShell(
                         ).show()
                     }
                 }
+                ScannerMode.PHILSYS_CUSTOMER -> {
+                    pendingPhilSysQr = code
+                    screen = MainScreen.CUSTOMERS
+                }
             }
         }
     }
@@ -440,7 +445,10 @@ private fun MainShell(
                     repository = repository,
                     pendingBarcode = pendingCustomerBarcode,
                     onPendingBarcodeHandled = { pendingCustomerBarcode = null },
+                    pendingPhilSysQr = pendingPhilSysQr,
+                    onPendingPhilSysQrHandled = { pendingPhilSysQr = null },
                     onScanRequest = { scannerMode = ScannerMode.CUSTOMER },
+                    onPhilSysScanRequest = { scannerMode = ScannerMode.PHILSYS_CUSTOMER },
                     onBack = { screen = MainScreen.MORE }
                 )
                 MainScreen.MORE -> MoreScreen(
