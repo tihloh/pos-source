@@ -4,10 +4,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -276,45 +278,59 @@ private fun ProductRow(
     onArchive: () -> Unit
 ) {
     Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            ProductThumbnail(
+                imageUrl = product.imageUrl,
+                width = 96.dp
+            )
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                ProductThumbnail(
-                    imageUrl = product.imageUrl,
-                    size = 76.dp
-                )
-                Column(Modifier.weight(1f)) {
-                    Text(product.name, style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        listOfNotNull(product.barcode, product.sku)
-                            .joinToString(" · ")
-                            .ifBlank { "No barcode" },
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-                Column(horizontalAlignment = Alignment.End) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(product.name, style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            listOfNotNull(product.barcode, product.sku)
+                                .joinToString(" · ")
+                                .ifBlank { "No barcode" },
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                     Text(
                         money(product.sellingPriceCents),
                         style = MaterialTheme.typography.titleMedium
                     )
-                    Row {
-                        IconButton(onClick = onEdit) {
-                            Icon(Icons.Default.Edit, contentDescription = "Edit")
-                        }
-                        IconButton(onClick = onArchive) {
-                            Icon(Icons.Default.DeleteOutline, contentDescription = "Archive")
-                        }
+                }
+
+                val stockText = if (product.inventoryEnabled) {
+                    "Stock: ${quantity(product.stockCache)} ${product.unit}"
+                } else "Non-inventory item"
+                Text("$stockText · ${product.itemType}")
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    IconButton(onClick = onEdit) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit")
+                    }
+                    IconButton(onClick = onArchive) {
+                        Icon(Icons.Default.DeleteOutline, contentDescription = "Archive")
                     }
                 }
             }
-            Spacer(Modifier.height(6.dp))
-            val stockText = if (product.inventoryEnabled) {
-                "Stock: ${quantity(product.stockCache)} ${product.unit}"
-            } else "Non-inventory item"
-            Text("$stockText · ${product.itemType}")
         }
     }
 }
