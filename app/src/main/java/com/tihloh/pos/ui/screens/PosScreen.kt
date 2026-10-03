@@ -3,6 +3,7 @@ package com.tihloh.pos.ui.screens
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -603,29 +604,16 @@ private fun CheckoutDialog(
                 }
 
                 Text("Payment method", style = MaterialTheme.typography.labelLarge)
-                Row(
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    listOf("Cash", "GCash").forEach { type ->
+                    listOf("Cash", "GCash", "Maya", "Card", "Account Payable").forEach { type ->
                         FilterChip(
                             selected = paymentType == type,
                             onClick = { paymentType = type },
-                            label = { Text(type) },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    listOf("Maya", "Card", "Account Payable").forEach { type ->
-                        FilterChip(
-                            selected = paymentType == type,
-                            onClick = { paymentType = type },
-                            label = { Text(type) },
-                            modifier = Modifier.weight(1f)
+                            label = { Text(type) }
                         )
                     }
                 }
