@@ -18,7 +18,8 @@ import java.net.URL
 @Composable
 fun NetworkImage(
     url: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.Fit
 ) {
     val bitmap by produceState<ImageBitmap?>(initialValue = null, url) {
         value = withContext(Dispatchers.IO) {
@@ -42,7 +43,7 @@ fun NetworkImage(
             bitmap = it,
             contentDescription = "Product image",
             modifier = modifier,
-            contentScale = ContentScale.Fit
+            contentScale = contentScale
         )
     }
 }
