@@ -52,6 +52,7 @@ object EscPosReceiptEncoder {
             "{total}" to money(receipt.totalCents),
             "{payment}" to receipt.paymentType,
             "{paid}" to money(receipt.amountPaidCents),
+            "{balance}" to money((receipt.totalCents - receipt.amountPaidCents).coerceAtLeast(0L)),
             "{change}" to money(receipt.changeCents)
         )
 
