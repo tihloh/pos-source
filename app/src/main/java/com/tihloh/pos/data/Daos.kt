@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
+import androidx.room.OnConflictStrategy
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -43,6 +44,9 @@ interface InventoryDao {
 
     @Query("SELECT COALESCE(SUM(quantityDelta), 0) FROM InventoryTransactionEntity WHERE productId = :productId")
     suspend fun balance(productId: Long): Double
+
+    @Query("SELECT * FROM InventoryTransactionEntity ORDER BY createdAt")
+    fun observeAll(): Flow<List<InventoryTransactionEntity>>
 }
 
 @Dao
@@ -67,6 +71,9 @@ interface SalesDao {
 
     @Insert
     suspend fun addPayments(payments: List<PaymentEntity>)
+
+    @Query("SELECT * FROM SaleEntity WHERE createdAt BETWEEN :from AND :to ORDER BY createdAt DESC")
+    suspend fun getRange(from: Long, to: Long): List<SaleEntity>
 }
 
 @Dao
@@ -82,4 +89,26 @@ interface SupplierDao {
 
     @Update
     suspend fun update(supplier: SupplierEntity)
+}
+
+
+@Dao
+interface ProductSupplierDao {
+    @Query("SELECT supplierId FROM ProductSupplierCrossRef WHERE productId = :productId ORDER BY isPrimary DESC, supplierId")
+    suspend fun supplierIdsForProduct(productId: Long): List<Long>
+
+    @Query("SELECT productId FROM ProductSupplierCrossRef WHERE supplierId = :supplierId ORDER BY productId")
+    suspend fun productIdsForSupplier(supplierId: Long): List<Long>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertLinks(links: List<ProductSupplierCrossRef>)
+
+    @Query("DELETE FROM ProductSupplierCrossRef WHERE productId = :productId")
+    suspend fun clearForProduct(productId: Long)
+
+    @Query("DELETE FROM ProductSupplierCrossRef WHERE supplierId = :supplierId")
+    suspend fun clearForSupplier(supplierId: Long)
+
+    @Query("SELECT * FROM ProductSupplierCrossRef")
+    suspend fun all(): List<ProductSupplierCrossRef>
 }
