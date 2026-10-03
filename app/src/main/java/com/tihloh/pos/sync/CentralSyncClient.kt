@@ -1,5 +1,6 @@
 package com.tihloh.pos.sync
 
+import com.tihloh.pos.data.CustomerEntity
 import com.tihloh.pos.data.ProductEntity
 import com.tihloh.pos.data.SaleEntity
 import com.tihloh.pos.data.SupplierEntity
@@ -15,6 +16,7 @@ import java.util.Base64
 data class SyncSnapshot(
     val products: List<ProductEntity>,
     val suppliers: List<SupplierEntity>,
+    val customers: List<CustomerEntity>,
     val sales: List<SaleEntity>
 )
 
@@ -80,10 +82,28 @@ class CentralSyncClient(private val config: SyncConfig) {
                         put("active", s.active)
                     }
                 }))
+                put("customers", JSONArray(snapshot.customers.map { c ->
+                    JSONObject().apply {
+                        put("id", c.id)
+                        put("barcode", c.barcode)
+                        put("name", c.name)
+                        put("phone", c.phone)
+                        put("email", c.email)
+                        put("address", c.address)
+                        put("careOf", c.careOf)
+                        put("notes", c.notes)
+                        put("active", c.active)
+                        put("createdAt", c.createdAt)
+                        put("updatedAt", c.updatedAt)
+                    }
+                }))
                 put("sales", JSONArray(snapshot.sales.map { s ->
                     JSONObject().apply {
                         put("id", s.id)
                         put("receiptNumber", s.receiptNumber)
+                        put("customerId", s.customerId)
+                        put("customerName", s.customerName)
+                        put("careOf", s.careOf)
                         put("subtotalCents", s.subtotalCents)
                         put("discountCents", s.discountCents)
                         put("totalCents", s.totalCents)
