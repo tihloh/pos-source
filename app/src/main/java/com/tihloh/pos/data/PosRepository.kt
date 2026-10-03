@@ -21,6 +21,7 @@ class PosRepository(private val db: AppDatabase) {
     val products = db.products().observeAll()
     val sales = db.sales().observeLatest()
     val suppliers = db.suppliers().observeAll()
+    val customers = db.customers().observeAll()
     val inventoryTransactions = db.inventory().observeAll()
 
     suspend fun findByBarcode(barcode: String): ProductEntity? {
@@ -159,7 +160,9 @@ class PosRepository(private val db: AppDatabase) {
         lines: List<SaleLineInput>,
         paymentType: String,
         amountPaidCents: Long,
-        paymentReference: String? = null
+        paymentReference: String? = null,
+        customerId: Long? = null,
+        careOf: String? = null
     ): SaleDetail = db.withTransaction {
         require(lines.isNotEmpty()) { "Cart is empty." }
 
@@ -183,8 +186,12 @@ class PosRepository(private val db: AppDatabase) {
         val receipt = "POS-" + LocalDateTime.now()
             .format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS"))
 
+        val selectedCustomer = customerId?.let { db.customers().getById(it) }
         val sale = SaleEntity(
             receiptNumber = receipt,
+            customerId = selectedCustomer?.id,
+            customerName = selectedCustomer?.name,
+            careOf = careOf?.trim()?.ifBlank { null } ?: selectedCustomer?.careOf,
             subtotalCents = subtotal,
             totalCents = total,
             amountPaidCents = amountPaidCents,
@@ -244,6 +251,7 @@ class PosRepository(private val db: AppDatabase) {
     suspend fun syncSnapshot(): SyncSnapshot = SyncSnapshot(
         products = db.products().getAllActive(),
         suppliers = db.suppliers().getAllActive(),
+        customers = db.customers().getAllActive(),
         sales = db.sales().getRange(0L, Long.MAX_VALUE)
     )
 
@@ -262,5 +270,40 @@ class PosRepository(private val db: AppDatabase) {
             db.suppliers().update(supplier)
             supplier.id
         }
+    }
+
+    suspend fun findCustomerByBarcode(barcode: String): CustomerEntity? {
+        val cleaned = barcode.trim().filter { !it.isWhitespace() && !it.isISOControl() }
+        if (cleaned.isBlank()) return null
+        return db.customers().findByBarcode(cleaned)
+    }
+
+    suspend fun saveCustomer(customer: CustomerEntity): Long = db.withTransaction {
+        val now = System.currentTimeMillis()
+        val barcode = customer.barcode.trim()
+            .filter { !it.isWhitespace() && !it.isISOControl() }
+            .ifBlank { "CUS-$now" }
+
+        val clean = customer.copy(
+            barcode = barcode,
+            name = customer.name.trim(),
+            phone = customer.phone?.trim()?.ifBlank { null },
+            email = customer.email?.trim()?.ifBlank { null },
+            address = customer.address?.trim()?.ifBlank { null },
+            careOf = customer.careOf?.trim()?.ifBlank { null },
+            notes = customer.notes?.trim()?.ifBlank { null },
+            updatedAt = now
+        )
+
+        if (clean.id == 0L) {
+            db.customers().insert(clean.copy(createdAt = now))
+        } else {
+            db.customers().update(clean)
+            clean.id
+        }
+    }
+
+    suspend fun archiveCustomer(customerId: Long) {
+        db.customers().archive(customerId)
     }
 }
