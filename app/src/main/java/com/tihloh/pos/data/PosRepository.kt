@@ -161,8 +161,7 @@ class PosRepository(private val db: AppDatabase) {
         paymentType: String,
         amountPaidCents: Long,
         paymentReference: String? = null,
-        customerId: Long? = null,
-        careOf: String? = null
+        customerId: Long? = null
     ): SaleDetail = db.withTransaction {
         require(lines.isNotEmpty()) { "Cart is empty." }
 
@@ -181,7 +180,13 @@ class PosRepository(private val db: AppDatabase) {
             (product.sellingPriceCents * quantity).roundToLong()
         }
         val total = subtotal
-        require(amountPaidCents >= total) { "Payment is less than the total." }
+        val isAccountPayable = paymentType == "Account Payable"
+        if (isAccountPayable) {
+            require(customerId != null) { "A registered customer is required for Account Payable." }
+            require(amountPaidCents == 0L) { "Account Payable must start with zero payment." }
+        } else {
+            require(amountPaidCents >= total) { "Payment is less than the total." }
+        }
 
         val receipt = "POS-" + LocalDateTime.now()
             .format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS"))
@@ -191,11 +196,11 @@ class PosRepository(private val db: AppDatabase) {
             receiptNumber = receipt,
             customerId = selectedCustomer?.id,
             customerName = selectedCustomer?.name,
-            careOf = careOf?.trim()?.ifBlank { null } ?: selectedCustomer?.careOf,
             subtotalCents = subtotal,
             totalCents = total,
             amountPaidCents = amountPaidCents,
-            changeCents = amountPaidCents - total
+            changeCents = if (isAccountPayable) 0L else amountPaidCents - total,
+            status = if (isAccountPayable) "ACCOUNT_PAYABLE" else "COMPLETED"
         )
         val saleId = db.sales().addSale(sale)
 
@@ -290,7 +295,7 @@ class PosRepository(private val db: AppDatabase) {
             phone = customer.phone?.trim()?.ifBlank { null },
             email = customer.email?.trim()?.ifBlank { null },
             address = customer.address?.trim()?.ifBlank { null },
-            careOf = customer.careOf?.trim()?.ifBlank { null },
+            careOf = null,
             notes = customer.notes?.trim()?.ifBlank { null },
             updatedAt = now
         )
