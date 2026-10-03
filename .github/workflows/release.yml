@@ -35,7 +35,8 @@ jobs:
       STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-      GH_TOKEN: ${{ github.token }}
+      GH_TOKEN: ${{ secrets.POS_RELEASE_TOKEN }}
+      RELEASE_REPO: tihloh/pos
 
     steps:
       - name: Checkout
@@ -86,13 +87,14 @@ jobs:
       - name: Install Android platform
         run: sdkmanager "platforms;android-37.0" "build-tools;36.0.0"
 
-      - name: Validate signing secrets
+      - name: Validate release secrets
         shell: bash
         run: |
           test -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" || (echo "Missing ANDROID_KEYSTORE_BASE64" && exit 1)
           test -n "$STORE_PASSWORD" || (echo "Missing ANDROID_KEYSTORE_PASSWORD" && exit 1)
           test -n "$KEY_ALIAS" || (echo "Missing ANDROID_KEY_ALIAS" && exit 1)
           test -n "$KEY_PASSWORD" || (echo "Missing ANDROID_KEY_PASSWORD" && exit 1)
+          test -n "$GH_TOKEN" || (echo "Missing POS_RELEASE_TOKEN" && exit 1)
 
       - name: Restore release keystore
         shell: bash
@@ -105,7 +107,7 @@ jobs:
           gradle :app:assembleRelease --stacktrace \
             -PVERSION_NAME="${{ steps.meta.outputs.version_name }}" \
             -PVERSION_CODE="${{ steps.meta.outputs.version_code }}" \
-            -PGITHUB_REPO="${{ github.repository }}" \
+            -PGITHUB_REPO="$RELEASE_REPO" \
             -PSIGNING_STORE_FILE="$RUNNER_TEMP/pos-release.jks" \
             -PSIGNING_STORE_PASSWORD="$STORE_PASSWORD" \
             -PSIGNING_KEY_ALIAS="$KEY_ALIAS" \
@@ -131,11 +133,13 @@ jobs:
           if [ -n "$RELEASE_NOTES" ]; then
             printf '%s\n' "$RELEASE_NOTES" > release-notes.md
             gh release create "$TAG" "$APK" \
+              --repo "$RELEASE_REPO" \
               --title "POS $TAG" \
               --notes-file release-notes.md \
               "${EXTRA[@]}"
           else
             gh release create "$TAG" "$APK" \
+              --repo "$RELEASE_REPO" \
               --title "POS $TAG" \
               --generate-notes \
               "${EXTRA[@]}"
