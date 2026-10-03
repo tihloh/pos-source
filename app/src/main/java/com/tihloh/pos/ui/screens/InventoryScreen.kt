@@ -74,7 +74,7 @@ fun InventoryScreen(
     ) {
         Text("Inventory", style = MaterialTheme.typography.headlineMedium)
         Text(
-            "Beginning + Added = Ending balance",
+            "Beginning + Added − Removed − Sold = Ending",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -141,6 +141,10 @@ private fun InventoryRow(
     val beginning = ledger.filter { it.type == "OPENING" }.sumOf { it.quantityDelta }
     val added = ledger.filter { it.type != "OPENING" && it.quantityDelta > 0 }
         .sumOf { it.quantityDelta }
+    val sold = -ledger.filter { it.type == "SALE" && it.quantityDelta < 0 }
+        .sumOf { it.quantityDelta }
+    val removed = -ledger.filter { it.type != "SALE" && it.quantityDelta < 0 }
+        .sumOf { it.quantityDelta }
 
     Card(Modifier.fillMaxWidth()) {
         Column(
@@ -174,12 +178,27 @@ private fun InventoryRow(
                 )
                 BalanceMetric(
                     label = "Added",
-                    value = quantity(added),
+                    value = "+${quantity(added)}",
                     modifier = Modifier.weight(1f)
                 )
                 BalanceMetric(
                     label = "Ending",
                     value = quantity(product.stockCache),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                BalanceMetric(
+                    label = "Removed",
+                    value = "-${quantity(removed)}",
+                    modifier = Modifier.weight(1f)
+                )
+                BalanceMetric(
+                    label = "Sold",
+                    value = "-${quantity(sold)}",
                     modifier = Modifier.weight(1f)
                 )
             }
