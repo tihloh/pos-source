@@ -63,6 +63,7 @@ import com.tihloh.pos.update.UpdateInfo
 import com.tihloh.pos.sync.CentralSyncClient
 import com.tihloh.pos.sync.SyncSettings
 import kotlinx.coroutines.launch
+import com.tihloh.pos.ui.theme.ThemeMode
 
 private enum class MainScreen(val title: String, val icon: ImageVector) {
     POS("POS", Icons.Default.PointOfSale),
@@ -78,7 +79,9 @@ private enum class ScannerMode { POS, INVENTORY, PRODUCT }
 fun PosRoot(
     pinStore: PinStore,
     biometricAvailable: Boolean,
-    requestBiometric: (() -> Unit) -> Unit
+    requestBiometric: (() -> Unit) -> Unit,
+    themeMode: ThemeMode,
+    onThemeModeChange: (ThemeMode) -> Unit
 ) {
     var unlocked by rememberSaveable { mutableStateOf(false) }
     var hasPin by remember { mutableStateOf(pinStore.hasPin()) }
@@ -102,7 +105,7 @@ fun PosRoot(
         return
     }
 
-    MainShell()
+    MainShell(themeMode, onThemeModeChange)
 }
 
 @Composable
@@ -182,7 +185,10 @@ private fun CenteredPanel(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun MainShell() {
+private fun MainShell(
+    themeMode: ThemeMode,
+    onThemeModeChange: (ThemeMode) -> Unit
+) {
     val context = LocalContext.current
     val repository = remember {
         PosRepository(AppDatabase.get(context.applicationContext))
@@ -395,7 +401,9 @@ private fun MainShell() {
                     repository = repository,
                     checkUpdate = {
                         updateInfo = checker.check(force = true)
-                    }
+                    },
+                    themeMode = themeMode,
+                    onThemeModeChange = onThemeModeChange
                 )
             }
         }
