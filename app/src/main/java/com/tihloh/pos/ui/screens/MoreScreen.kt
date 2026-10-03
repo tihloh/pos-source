@@ -1,6 +1,12 @@
 package com.tihloh.pos.ui.screens
 
+import android.Manifest
+import android.content.Intent
+import android.os.Build
+import android.provider.Settings
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -12,12 +18,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -40,18 +49,26 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.tihloh.pos.data.PosRepository
 import com.tihloh.pos.data.SupplierEntity
+import com.tihloh.pos.printer.BluetoothEscPosPrinter
+import com.tihloh.pos.printer.BluetoothPrinterSupport
+import com.tihloh.pos.printer.PairedPrinter
 import com.tihloh.pos.printer.PrinterConfig
 import com.tihloh.pos.printer.PrinterSettings
+import com.tihloh.pos.printer.ReceiptData
+import com.tihloh.pos.printer.ReceiptLine
 import com.tihloh.pos.printer.TcpEscPosPrinter
 import com.tihloh.pos.sync.CentralSyncClient
 import com.tihloh.pos.sync.SyncConfig
 import com.tihloh.pos.sync.SyncSettings
+import com.tihloh.pos.ui.theme.ThemeMode
 import kotlinx.coroutines.launch
 
 @Composable
 fun MoreScreen(
     repository: PosRepository,
-    checkUpdate: suspend () -> Unit
+    checkUpdate: suspend () -> Unit,
+    themeMode: ThemeMode,
+    onThemeModeChange: (ThemeMode) -> Unit
 ) {
     val suppliers by repository.suppliers.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
@@ -63,6 +80,23 @@ fun MoreScreen(
     var printerDialog by remember { mutableStateOf(false) }
     var syncDialog by remember { mutableStateOf(false) }
     var syncing by remember { mutableStateOf(false) }
+    var pairedDevices by remember { mutableStateOf<List<PairedPrinter>>(emptyList()) }
+
+    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            pairedDevices = BluetoothPrinterSupport.pairedDevices(context)
+        }
+    }
+
+    fun refreshBluetoothDevices() {
+        if (BluetoothPrinterSupport.hasPermission(context)) {
+            pairedDevices = BluetoothPrinterSupport.pairedDevices(context)
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+        }
+    }
 
     Column(
         Modifier.fillMaxSize().padding(16.dp),
@@ -70,20 +104,53 @@ fun MoreScreen(
     ) {
         Text("More", style = MaterialTheme.typography.headlineMedium)
 
+        Card(Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.DarkMode, contentDescription = null)
+                    Text(
+                        "Appearance",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ThemeMode.entries.forEach { mode ->
+                        FilterChip(
+                            selected = themeMode == mode,
+                            onClick = { onThemeModeChange(mode) },
+                            label = {
+                                Text(
+                                    when (mode) {
+                                        ThemeMode.SYSTEM -> "System"
+                                        ThemeMode.LIGHT -> "Light"
+                                        ThemeMode.DARK -> "Dark"
+                                    }
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Card(
-                modifier = Modifier.weight(1f).clickable { printerDialog = true }
+                modifier = Modifier.weight(1f).clickable {
+                    refreshBluetoothDevices()
+                    printerDialog = true
+                }
             ) {
                 Column(Modifier.padding(14.dp)) {
                     Icon(Icons.Default.Print, contentDescription = null)
                     Text("Receipt printer", style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        "ESC/POS network printer",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    Text("Bluetooth or network ESC/POS", style = MaterialTheme.typography.bodySmall)
                 }
             }
             Card(
@@ -92,10 +159,7 @@ fun MoreScreen(
                 Column(Modifier.padding(14.dp)) {
                     Icon(Icons.Default.CloudSync, contentDescription = null)
                     Text("Central sync", style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        "Local-first + online server",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    Text("Local-first + online server", style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -130,9 +194,7 @@ fun MoreScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(suppliers, key = { it.id }) { supplier ->
-                    Card(
-                        Modifier.fillMaxWidth().clickable { editing = supplier }
-                    ) {
+                    Card(Modifier.fillMaxWidth().clickable { editing = supplier }) {
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(14.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -164,6 +226,11 @@ fun MoreScreen(
     if (printerDialog) {
         PrinterDialog(
             initial = PrinterSettings(context).load(),
+            pairedDevices = pairedDevices,
+            onRefreshBluetooth = ::refreshBluetoothDevices,
+            onOpenBluetoothSettings = {
+                context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+            },
             onDismiss = { printerDialog = false },
             onSave = {
                 PrinterSettings(context).save(it)
@@ -172,17 +239,31 @@ fun MoreScreen(
             },
             onTest = { cfg ->
                 scope.launch {
-                    TcpEscPosPrinter(cfg.host, cfg.port).test()
-                        .onSuccess {
-                            Toast.makeText(context, "Test receipt sent.", Toast.LENGTH_SHORT).show()
-                        }
-                        .onFailure {
-                            Toast.makeText(
-                                context,
-                                it.message ?: "Printer test failed.",
-                                Toast.LENGTH_LONG
-                            ).show()
-                        }
+                    val testReceipt = ReceiptData(
+                        receiptNumber = "TEST",
+                        lines = listOf(ReceiptLine("Printer test", 1.0, 0, 0)),
+                        subtotalCents = 0,
+                        discountCents = 0,
+                        totalCents = 0,
+                        paymentType = "TEST",
+                        amountPaidCents = 0,
+                        changeCents = 0,
+                        timestamp = System.currentTimeMillis()
+                    )
+                    val result = if (cfg.connectionType == "BLUETOOTH") {
+                        BluetoothEscPosPrinter(context, cfg.bluetoothAddress).print(testReceipt)
+                    } else {
+                        TcpEscPosPrinter(cfg.host, cfg.port).print(testReceipt)
+                    }
+                    result.onSuccess {
+                        Toast.makeText(context, "Test receipt sent.", Toast.LENGTH_SHORT).show()
+                    }.onFailure {
+                        Toast.makeText(
+                            context,
+                            it.message ?: "Printer test failed.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                 }
             }
         )
@@ -247,58 +328,150 @@ fun MoreScreen(
 @Composable
 private fun PrinterDialog(
     initial: PrinterConfig,
+    pairedDevices: List<PairedPrinter>,
+    onRefreshBluetooth: () -> Unit,
+    onOpenBluetoothSettings: () -> Unit,
     onDismiss: () -> Unit,
     onSave: (PrinterConfig) -> Unit,
     onTest: (PrinterConfig) -> Unit
 ) {
     var enabled by remember(initial) { mutableStateOf(initial.enabled) }
+    var connectionType by remember(initial) { mutableStateOf(initial.connectionType) }
     var host by remember(initial) { mutableStateOf(initial.host) }
     var port by remember(initial) { mutableStateOf(initial.port.toString()) }
-    val cfg = PrinterConfig(enabled, host.trim(), port.toIntOrNull() ?: 9100)
+    var bluetoothAddress by remember(initial) { mutableStateOf(initial.bluetoothAddress) }
+    var bluetoothName by remember(initial) { mutableStateOf(initial.bluetoothName) }
+
+    val cfg = PrinterConfig(
+        enabled = enabled,
+        connectionType = connectionType,
+        host = host.trim(),
+        port = port.toIntOrNull() ?: 9100,
+        bluetoothAddress = bluetoothAddress,
+        bluetoothName = bluetoothName
+    )
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Receipt printer") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Auto-print ready")
-                        Text(
-                            "Network ESC/POS · usually port 9100",
-                            style = MaterialTheme.typography.bodySmall
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Enable receipt printer")
+                            Text("ESC/POS thermal printer", style = MaterialTheme.typography.bodySmall)
+                        }
+                        Switch(checked = enabled, onCheckedChange = { enabled = it })
+                    }
+                }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = connectionType == "BLUETOOTH",
+                            onClick = {
+                                connectionType = "BLUETOOTH"
+                                onRefreshBluetooth()
+                            },
+                            label = { Text("Bluetooth") },
+                            leadingIcon = { Icon(Icons.Default.Bluetooth, null) }
+                        )
+                        FilterChip(
+                            selected = connectionType == "TCP",
+                            onClick = { connectionType = "TCP" },
+                            label = { Text("Network / Wi-Fi") }
                         )
                     }
-                    Switch(checked = enabled, onCheckedChange = { enabled = it })
                 }
-                OutlinedTextField(
-                    value = host,
-                    onValueChange = { host = it },
-                    label = { Text("Printer IP / host") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = port,
-                    onValueChange = { port = it.filter(Char::isDigit) },
-                    label = { Text("Port") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedButton(
-                    onClick = { onTest(cfg) },
-                    enabled = host.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Print test receipt") }
+                if (connectionType == "BLUETOOTH") {
+                    item {
+                        Text(
+                            "Paired printers",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                    }
+                    if (pairedDevices.isEmpty()) {
+                        item {
+                            Text(
+                                "No paired Bluetooth devices found. Pair the printer in Android first, then refresh.",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        item {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onClick = onOpenBluetoothSettings) {
+                                    Text("Pair device")
+                                }
+                                OutlinedButton(onClick = onRefreshBluetooth) {
+                                    Text("Refresh")
+                                }
+                            }
+                        }
+                    } else {
+                        items(pairedDevices, key = { it.address }) { device ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth().clickable {
+                                    bluetoothAddress = device.address
+                                    bluetoothName = device.name
+                                }
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(device.name, style = MaterialTheme.typography.titleSmall)
+                                        Text(device.address, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    if (bluetoothAddress == device.address) {
+                                        Text("Selected", color = MaterialTheme.colorScheme.primary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    item {
+                        OutlinedTextField(
+                            value = host,
+                            onValueChange = { host = it },
+                            label = { Text("Printer IP / host") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    item {
+                        OutlinedTextField(
+                            value = port,
+                            onValueChange = { port = it.filter(Char::isDigit) },
+                            label = { Text("Port") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+                item {
+                    OutlinedButton(
+                        onClick = { onTest(cfg) },
+                        enabled = when (connectionType) {
+                            "BLUETOOTH" -> bluetoothAddress.isNotBlank()
+                            else -> host.isNotBlank()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Print test receipt") }
+                }
             }
         },
         confirmButton = {
             Button(
                 onClick = { onSave(cfg) },
-                enabled = !enabled || host.isNotBlank()
+                enabled = !enabled || when (connectionType) {
+                    "BLUETOOTH" -> bluetoothAddress.isNotBlank()
+                    else -> host.isNotBlank()
+                }
             ) { Text("Save") }
         },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } }
