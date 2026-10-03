@@ -3,8 +3,10 @@ package com.tihloh.pos.ui.screens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -157,43 +159,52 @@ private fun InventoryRow(
         .sumOf { it.quantityDelta }
 
     Card(Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                ProductThumbnail(
-                    imageUrl = product.imageUrl,
-                    size = 68.dp
-                )
-                Column(Modifier.weight(1f)) {
-                    Text(product.name, style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        product.barcode ?: product.sku ?: "No barcode",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Text(
-                    "${quantity(product.stockCache)} ${product.unit}",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                OutlinedButton(onClick = onAdjust) { Text("Adjust") }
-            }
+            ProductThumbnail(
+                imageUrl = product.imageUrl,
+                width = 88.dp
+            )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                CompactMetric("Beg", quantity(beginning), Modifier.weight(1f))
-                CompactMetric("+Add", quantity(added), Modifier.weight(1f))
-                CompactMetric("-Rem", quantity(removed), Modifier.weight(1f))
-                CompactMetric("-Sold", quantity(sold), Modifier.weight(1f))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(product.name, style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            product.barcode ?: product.sku ?: "No barcode",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        "${quantity(product.stockCache)} ${product.unit}",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    OutlinedButton(onClick = onAdjust) { Text("Adjust") }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    CompactMetric("Beg", quantity(beginning), Modifier.weight(1f))
+                    CompactMetric("+Add", quantity(added), Modifier.weight(1f))
+                    CompactMetric("-Rem", quantity(removed), Modifier.weight(1f))
+                    CompactMetric("-Sold", quantity(sold), Modifier.weight(1f))
+                }
             }
         }
     }
