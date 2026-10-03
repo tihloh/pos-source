@@ -131,3 +131,30 @@ data class InventoryPeriodEntity(
     val status: String = "OPEN",
     val closedAt: Long? = null
 )
+
+
+@Entity(
+    primaryKeys = ["productId", "supplierId"],
+    indices = [Index("productId"), Index("supplierId")],
+    foreignKeys = [
+        ForeignKey(
+            entity = ProductEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["productId"],
+            onDelete = ForeignKey.CASCADE
+        ),
+        ForeignKey(
+            entity = SupplierEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["supplierId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ]
+)
+data class ProductSupplierCrossRef(
+    val productId: Long,
+    val supplierId: Long,
+    val isPrimary: Boolean = false,
+    val supplierCostCents: Long? = null,
+    val supplierSku: String? = null
+)
