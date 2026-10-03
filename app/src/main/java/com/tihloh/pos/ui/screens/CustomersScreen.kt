@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -32,6 +33,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.tihloh.pos.data.CustomerEntity
 import com.tihloh.pos.data.PosRepository
+import com.tihloh.pos.philsys.PhilSysParseResult
+import com.tihloh.pos.philsys.PhilSysProfile
+import com.tihloh.pos.philsys.PhilSysQrParser
 import com.tihloh.pos.ui.ScanTextField
 import kotlinx.coroutines.launch
 
@@ -40,7 +44,10 @@ fun CustomersScreen(
     repository: PosRepository,
     pendingBarcode: String?,
     onPendingBarcodeHandled: () -> Unit,
+    pendingPhilSysQr: String?,
+    onPendingPhilSysQrHandled: () -> Unit,
     onScanRequest: () -> Unit,
+    onPhilSysScanRequest: () -> Unit,
     onBack: () -> Unit
 ) {
     val customers by repository.customers.collectAsState(initial = emptyList())
@@ -48,6 +55,8 @@ fun CustomersScreen(
     var query by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf<CustomerEntity?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var showPhilSysConsent by remember { mutableStateOf(false) }
+    var philSysProfile by remember { mutableStateOf<PhilSysProfile?>(null) }
 
     LaunchedEffect(pendingBarcode) {
         val code = pendingBarcode ?: return@LaunchedEffect
@@ -58,6 +67,21 @@ fun CustomersScreen(
             editing = CustomerEntity(barcode = code.trim(), name = "")
         }
         onPendingBarcodeHandled()
+    }
+
+
+    LaunchedEffect(pendingPhilSysQr) {
+        val raw = pendingPhilSysQr ?: return@LaunchedEffect
+        when (val parsed = PhilSysQrParser.parse(raw)) {
+            is PhilSysParseResult.Success -> {
+                philSysProfile = parsed.profile
+                error = null
+            }
+            is PhilSysParseResult.Invalid -> {
+                error = parsed.message
+            }
+        }
+        onPendingPhilSysQrHandled()
     }
 
     val filtered = remember(customers, query) {
@@ -85,6 +109,10 @@ fun CustomersScreen(
                 style = MaterialTheme.typography.headlineSmall,
                 modifier = Modifier.weight(1f).padding(start = 12.dp)
             )
+            OutlinedButton(onClick = { showPhilSysConsent = true }) {
+                Icon(Icons.Default.QrCodeScanner, contentDescription = null)
+                Text("PhilID")
+            }
             Button(onClick = { editing = CustomerEntity(barcode = "", name = "") }) {
                 Icon(Icons.Default.Add, contentDescription = null)
                 Text("Add")
@@ -132,12 +160,72 @@ fun CustomersScreen(
                                 if (detail.isNotBlank()) {
                                     Text(detail, style = MaterialTheme.typography.bodySmall)
                                 }
+                                if (customer.identitySource == "PHILSYS_QR") {
+                                    Text(
+                                        if (customer.identityVerified) {
+                                            "PhilSys verified"
+                                        } else {
+                                            "PhilSys QR imported · not cryptographically verified"
+                                        },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (customer.identityVerified) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    if (showPhilSysConsent) {
+        AlertDialog(
+            onDismissRequest = { showPhilSysConsent = false },
+            title = { Text("Scan PhilID / ePhilID") },
+            text = {
+                Text(
+                    "With the customer's consent, POS will read the demographic information " +
+                        "needed to prefill a customer account. The raw QR, digital signature, " +
+                        "and PhilSys Card Number will not be stored. This import does not by " +
+                        "itself cryptographically verify the PhilID."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showPhilSysConsent = false
+                        onPhilSysScanRequest()
+                    }
+                ) { Text("Consent given · Scan") }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { showPhilSysConsent = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    philSysProfile?.let { profile ->
+        PhilSysReviewDialog(
+            profile = profile,
+            onDismiss = { philSysProfile = null },
+            onUse = {
+                editing = CustomerEntity(
+                    barcode = "",
+                    name = profile.fullName,
+                    address = profile.placeOfBirth,
+                    identitySource = "PHILSYS_QR",
+                    identityVerified = false
+                )
+                philSysProfile = null
+            }
+        )
     }
 
     editing?.let { customer ->
@@ -269,5 +357,47 @@ private fun CustomerField(
         label = { Text(label) },
         singleLine = true,
         modifier = Modifier.fillMaxWidth()
+    )
+}
+
+
+@Composable
+private fun PhilSysReviewDialog(
+    profile: PhilSysProfile,
+    onDismiss: () -> Unit,
+    onUse: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Review PhilSys details") },
+        text = {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                item {
+                    Text(
+                        "Detected as a PSA-signed PhilSys QR structure. " +
+                            "Digital-signature validity has not been verified in this app.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                item { Text("Name: ${profile.fullName}") }
+                profile.sex?.let { value -> item { Text("Sex: $value") } }
+                profile.dateOfBirth?.let { value -> item { Text("Date of birth: $value") } }
+                profile.placeOfBirth?.let { value -> item { Text("Place of birth: $value") } }
+                profile.dateIssued?.let { value -> item { Text("Date issued: $value") } }
+                item {
+                    Text(
+                        "PCN, raw QR payload, and digital signature are intentionally not retained.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onUse) { Text("Use for customer") }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) { Text("Cancel") }
+        }
     )
 }
