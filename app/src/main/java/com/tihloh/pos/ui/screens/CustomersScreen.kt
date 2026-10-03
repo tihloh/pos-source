@@ -90,8 +90,7 @@ fun CustomersScreen(
                 it.name.contains(query, true) ||
                 it.barcode.contains(query, true) ||
                 it.phone.orEmpty().contains(query, true) ||
-                it.email.orEmpty().contains(query, true) ||
-                it.careOf.orEmpty().contains(query, true)
+                it.email.orEmpty().contains(query, true)
         }
     }
 
@@ -154,8 +153,7 @@ fun CustomersScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 val detail = listOfNotNull(
-                                    customer.phone,
-                                    customer.careOf?.let { "Care of: $it" }
+                                    customer.phone
                                 ).joinToString(" · ")
                                 if (detail.isNotBlank()) {
                                     Text(detail, style = MaterialTheme.typography.bodySmall)
@@ -268,7 +266,6 @@ private fun CustomerDialog(
     var phone by remember(initial) { mutableStateOf(initial.phone.orEmpty()) }
     var email by remember(initial) { mutableStateOf(initial.email.orEmpty()) }
     var address by remember(initial) { mutableStateOf(initial.address.orEmpty()) }
-    var careOf by remember(initial) { mutableStateOf(initial.careOf.orEmpty()) }
     var notes by remember(initial) { mutableStateOf(initial.notes.orEmpty()) }
 
     AlertDialog(
@@ -292,18 +289,6 @@ private fun CustomerDialog(
                 item { CustomerField("Address", address) { address = it } }
                 item {
                     OutlinedTextField(
-                        value = careOf,
-                        onValueChange = { careOf = it },
-                        label = { Text("Care of") },
-                        supportingText = {
-                            Text("Default C/O name or contact for this customer.")
-                        },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                item {
-                    OutlinedTextField(
                         value = notes,
                         onValueChange = { notes = it },
                         label = { Text("Notes") },
@@ -323,7 +308,7 @@ private fun CustomerDialog(
                             phone = phone.ifBlank { null },
                             email = email.ifBlank { null },
                             address = address.ifBlank { null },
-                            careOf = careOf.ifBlank { null },
+                            careOf = null,
                             notes = notes.ifBlank { null }
                         )
                     )
