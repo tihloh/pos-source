@@ -27,25 +27,32 @@ class PosRepository(private val db: AppDatabase) {
         val raw = barcode.trim()
         if (raw.isBlank()) return null
 
-        val compact = raw.filterNot(Char::isWhitespace)
-        val candidates = linkedSetOf(raw, compact)
+        val compact = raw.filter { !it.isWhitespace() && !it.isISOControl() }
+        val aimStripped = if (
+            compact.length > 3 &&
+            compact.startsWith("]") &&
+            compact[1].isLetterOrDigit() &&
+            compact[2].isLetterOrDigit()
+        ) compact.drop(3) else compact
+
+        val candidates = linkedSetOf(raw, compact, aimStripped)
 
         // UPC-A scanners and EAN-13 databases commonly differ only by a leading zero.
-        if (compact.all(Char::isDigit)) {
-            if (compact.length == 12) candidates += "0$compact"
-            if (compact.length == 13 && compact.startsWith("0")) candidates += compact.drop(1)
+        if (aimStripped.all(Char::isDigit)) {
+            if (aimStripped.length == 12) candidates += "0$aimStripped"
+            if (aimStripped.length == 13 && aimStripped.startsWith("0")) {
+                candidates += aimStripped.drop(1)
+            }
         }
 
-        for (candidate in candidates) {
+        for (candidate in candidates.filter(String::isNotBlank)) {
             db.products().findByBarcode(candidate)?.let { return it }
         }
 
-        // Final normalized fallback for data imported with formatting characters/spaces.
+        // Safe normalized fallback for older records saved with spaces/control characters.
         return db.products().getAllActive().firstOrNull { product ->
-            val saved = product.barcode.orEmpty().filterNot(Char::isWhitespace)
-            saved == compact ||
-                (compact.all(Char::isDigit) && saved.all(Char::isDigit) &&
-                    saved.trimStart('0') == compact.trimStart('0'))
+            product.barcode.orEmpty()
+                .filter { !it.isWhitespace() && !it.isISOControl() } in candidates
         }
     }
 
