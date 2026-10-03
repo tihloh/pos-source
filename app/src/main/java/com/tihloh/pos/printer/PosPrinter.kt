@@ -36,6 +36,7 @@ Discount: {discount}
 TOTAL: {total}
 Payment: {payment}
 Paid: {paid}
+Balance: {balance}
 Change: {change}
 
 Thank you!"""
