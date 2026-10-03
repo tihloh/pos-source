@@ -3,7 +3,6 @@ package com.tihloh.pos.ui.screens
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -134,18 +133,21 @@ fun PosScreen(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(filtered, key = { it.id }) { product ->
-                    Card(Modifier.fillMaxWidth()) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(112.dp)
+                    ) {
                         Row(
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(IntrinsicSize.Min)
-                                .padding(12.dp),
+                                .fillMaxSize()
+                                .padding(10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             ProductThumbnail(
                                 imageUrl = product.imageUrl,
-                                width = 88.dp
+                                width = 92.dp
                             )
                             Column(Modifier.weight(1f)) {
                                 Text(product.name, style = MaterialTheme.typography.titleSmall)
@@ -186,17 +188,21 @@ fun PosScreen(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(cart, key = { it.product.id }) { line ->
-                    Card(Modifier.fillMaxWidth()) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(112.dp)
+                    ) {
                         Row(
                             Modifier
-                                .height(IntrinsicSize.Min)
+                                .fillMaxSize()
                                 .padding(10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             ProductThumbnail(
                                 imageUrl = line.product.imageUrl,
-                                width = 78.dp
+                                width = 92.dp
                             )
                             Column(Modifier.weight(1f)) {
                                 Text(line.product.name, style = MaterialTheme.typography.titleMedium)
