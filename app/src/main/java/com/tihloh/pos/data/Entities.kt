@@ -41,6 +41,26 @@ data class SupplierEntity(
 )
 
 @Entity(
+    indices = [
+        Index(value = ["barcode"], unique = true),
+        Index(value = ["name"])
+    ]
+)
+data class CustomerEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val barcode: String,
+    val name: String,
+    val phone: String? = null,
+    val email: String? = null,
+    val address: String? = null,
+    val careOf: String? = null,
+    val notes: String? = null,
+    val active: Boolean = true,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(
     indices = [Index("productId"), Index("referenceId")],
     foreignKeys = [
         ForeignKey(
@@ -67,6 +87,9 @@ data class InventoryTransactionEntity(
 data class SaleEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val receiptNumber: String,
+    val customerId: Long? = null,
+    val customerName: String? = null,
+    val careOf: String? = null,
     val subtotalCents: Long,
     val discountCents: Long = 0,
     val totalCents: Long,
