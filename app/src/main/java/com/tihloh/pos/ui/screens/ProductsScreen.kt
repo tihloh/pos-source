@@ -284,7 +284,7 @@ private fun ProductRow(
             ) {
                 ProductThumbnail(
                     imageUrl = product.imageUrl,
-                    size = 54.dp
+                    size = 76.dp
                 )
                 Column(Modifier.weight(1f)) {
                     Text(product.name, style = MaterialTheme.typography.titleMedium)
