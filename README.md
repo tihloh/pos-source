@@ -9,15 +9,17 @@ Local-first Android POS and inventory app focused on fast scanner-driven retail 
 - Camera barcode/QR scanning with CameraX + ML Kit
 - Open Food Facts + Open Products Facts lookup
 - Product catalog with one-to-many / many-to-many supplier links
-- Ledger-based inventory with beginning, additions, and ending balances
+- Compact ledger-based inventory with beginning, added, removed, sold, and ending balances
 - Sales history with Today / 7 Days / 30 Days / All scopes, receipt search, transaction count, and totals
 - Checkout with blank payment entry plus one-tap **Exact** amount
 - Network ESC/POS receipt printer support (TCP, typically port 9100)
 - Receipt reprint from Sales and print immediately after checkout
 - Local Room database remains the operational source of truth
+- Product image picker with app-local image storage
+- Product images included in central-sync payloads when locally stored
 - Optional central-server snapshot sync
-- Mandatory update check when entering the app
-- Internal APK installer with no residual APK in Downloads
+- Forced update gate when entering the app + hourly background update checks
+- Background APK staging/install-session flow with no residual APK in Downloads
 - Signed GitHub Release workflow
 - Retail-focused Material 3 theme and custom POS launcher icon
 
@@ -37,7 +39,7 @@ Inventory is ledger based. Sales, receiving, physical counts and adjustments cre
 
 The Inventory screen presents a simplified view:
 
-`Beginning + Added → Ending`
+`Beginning + Added − Removed − Sold → Ending`
 
 Detailed transactions remain stored in the ledger.
 
@@ -80,7 +82,9 @@ This provides the client-side foundation for a future multi-device central POS s
 
 ## Updates
 
-The app force-checks the latest GitHub Release and prevents dismissing an available update. Installation is streamed to Android's package installer; the APK is not saved in Downloads.
+The app force-checks the latest GitHub Release and prevents use of an outdated version while a required update is available. It also checks hourly in the background when network access is available and can prepare/commit the PackageInstaller session automatically.
+
+Android's security model may still require the system install confirmation for ordinary sideloaded apps. Fully silent installation requires managed-device/device-owner, system-app, or equivalent privileged deployment. The APK is streamed internally and is not left in Downloads.
 
 ## Build and release
 
