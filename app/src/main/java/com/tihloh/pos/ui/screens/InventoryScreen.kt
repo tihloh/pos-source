@@ -73,7 +73,11 @@ fun InventoryScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("Inventory", style = MaterialTheme.typography.headlineMedium)
-        Text("Find stock quickly, then adjust only when needed.")
+        Text(
+            "Find stock quickly, then adjust only when needed.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         ScanTextField(
             value = query,
             onValueChange = { query = it },
@@ -90,15 +94,22 @@ fun InventoryScreen(
             items(filtered, key = { it.id }) { product ->
                 Card(Modifier.fillMaxWidth()) {
                     Row(
-                        Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier.fillMaxWidth().padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Column(Modifier.weight(1f)) {
                             Text(product.name, style = MaterialTheme.typography.titleMedium)
-                            Text(product.barcode ?: product.sku ?: "No barcode")
+                            Text(
+                                product.barcode ?: product.sku ?: "No barcode",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                             Text("Stock: ${quantity(product.stockCache)} ${product.unit}")
                         }
-                        Button(onClick = { selected = product }) { Text("Adjust") }
+                        Button(onClick = { selected = product }) {
+                            Text("Adjust")
+                        }
                     }
                 }
             }
