@@ -207,6 +207,7 @@ private fun MainShell(
     var inventoryScannedProduct by remember { mutableStateOf<ProductEntity?>(null) }
     var pendingProductBarcode by remember { mutableStateOf<String?>(null) }
     var initialUpdateCheck by remember { mutableStateOf(true) }
+    var autoInstallVersion by remember { mutableStateOf<String?>(null) }
 
     fun installUpdate(info: UpdateInfo) {
         if (installingUpdate) return
@@ -256,6 +257,18 @@ private fun MainShell(
         val syncConfig = SyncSettings(context.applicationContext).load()
         if (syncConfig.enabled && syncConfig.baseUrl.isNotBlank()) {
             CentralSyncClient(syncConfig).push(repository.syncSnapshot())
+        }
+    }
+
+    LaunchedEffect(updateInfo?.version, initialUpdateCheck) {
+        val info = updateInfo ?: return@LaunchedEffect
+        if (initialUpdateCheck || autoInstallVersion == info.version) return@LaunchedEffect
+
+        autoInstallVersion = info.version
+        if (info.apkUrl != null && internalUpdater.canInstallPackages()) {
+            installUpdate(info)
+        } else if (info.apkUrl != null) {
+            pendingInstall = info
         }
     }
 
@@ -313,7 +326,7 @@ private fun MainShell(
                     Spacer(Modifier.height(8.dp))
                     Text(
                         if (installingUpdate) {
-                            "Preparing update internally…"
+                            "Downloading and preparing the required update in the background…"
                         } else {
                             "The APK will be streamed directly into Android's installer. " +
                                 "No APK will be saved in Downloads."
@@ -322,26 +335,24 @@ private fun MainShell(
                 }
             },
             confirmButton = {
-                TextButton(
-                    enabled = !installingUpdate,
-                    onClick = {
-                        if (info.apkUrl == null) {
-                            Toast.makeText(
-                                context,
-                                "This release has no APK asset.",
-                                Toast.LENGTH_LONG
-                            ).show()
-                        } else if (internalUpdater.canInstallPackages()) {
-                            installUpdate(info)
-                        } else {
+                if (!internalUpdater.canInstallPackages()) {
+                    TextButton(
+                        enabled = !installingUpdate,
+                        onClick = {
                             pendingInstall = info
                             installPermissionLauncher.launch(
                                 internalUpdater.installPermissionIntent()
                             )
                         }
+                    ) {
+                        Text("Allow update install")
                     }
-                ) {
-                    Text(if (installingUpdate) "Preparing…" else "Install update")
+                } else {
+                    Text(
+                        if (installingUpdate) "Updating in background…" else "Update required",
+                        modifier = Modifier.padding(12.dp),
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
         )
