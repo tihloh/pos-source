@@ -49,6 +49,7 @@ import com.tihloh.pos.product.ProductImageStore
 import com.tihloh.pos.product.ProductLookupOutcome
 import com.tihloh.pos.product.ProductLookupService
 import com.tihloh.pos.ui.NetworkImage
+import com.tihloh.pos.ui.ProductThumbnail
 import com.tihloh.pos.ui.ScanTextField
 import com.tihloh.pos.ui.money
 import com.tihloh.pos.ui.parseMoneyToCents
@@ -279,8 +280,12 @@ private fun ProductRow(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                ProductThumbnail(
+                    imageUrl = product.imageUrl,
+                    size = 54.dp
+                )
                 Column(Modifier.weight(1f)) {
                     Text(product.name, style = MaterialTheme.typography.titleMedium)
                     Text(
