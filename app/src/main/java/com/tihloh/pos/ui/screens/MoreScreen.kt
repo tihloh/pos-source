@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -47,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.tihloh.pos.BuildConfig
 import com.tihloh.pos.data.PosRepository
 import com.tihloh.pos.data.SupplierEntity
 import com.tihloh.pos.printer.BluetoothEscPosPrinter
@@ -79,6 +81,7 @@ fun MoreScreen(
     var message by remember { mutableStateOf<String?>(null) }
     var printerDialog by remember { mutableStateOf(false) }
     var syncDialog by remember { mutableStateOf(false) }
+    var aboutDialog by remember { mutableStateOf(false) }
     var syncing by remember { mutableStateOf(false) }
     var pairedDevices by remember { mutableStateOf<List<PairedPrinter>>(emptyList()) }
 
@@ -164,6 +167,25 @@ fun MoreScreen(
             }
         }
 
+        Card(
+            modifier = Modifier.fillMaxWidth().clickable { aboutDialog = true }
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(Icons.Default.Info, contentDescription = null)
+                Column(Modifier.weight(1f)) {
+                    Text("About", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "App info, version, and developer",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
+
         Button(
             onClick = { checking = true },
             enabled = !checking,
@@ -213,6 +235,54 @@ fun MoreScreen(
                 }
             }
         }
+    }
+
+    if (aboutDialog) {
+        AlertDialog(
+            onDismissRequest = { aboutDialog = false },
+            title = { Text("About POS") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("POS", style = MaterialTheme.typography.headlineSmall)
+                    Text(
+                        "Point of Sale System",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        "Version ${BuildConfig.VERSION_NAME}",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text("Developer", style = MaterialTheme.typography.labelLarge)
+                            Text(
+                                "Christian Borsal Bustamante",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                            Text("Full Stack Software Developer")
+                            Text("IT Professional | Systems & Automation")
+                            Text(
+                                "GitHub: tihloh",
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    Text(
+                        "Local-first Android POS with inventory, barcode scanning, " +
+                            "receipt printing, suppliers, sales tracking, and central sync.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = { aboutDialog = false }) { Text("Close") }
+            }
+        )
     }
 
     if (checking) {
