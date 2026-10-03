@@ -168,7 +168,7 @@ private fun InventoryRow(
             ) {
                 ProductThumbnail(
                     imageUrl = product.imageUrl,
-                    size = 44.dp
+                    size = 68.dp
                 )
                 Column(Modifier.weight(1f)) {
                     Text(product.name, style = MaterialTheme.typography.titleSmall)
