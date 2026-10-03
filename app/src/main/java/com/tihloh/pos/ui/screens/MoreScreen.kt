@@ -575,7 +575,7 @@ private fun PrinterDialog(
                 item {
                     Text(
                         "Placeholders: {store}, {receipt}, {date}, {time}, {datetime}, " +
-                            "{customer}, {care_of}, {items}, {item_count}, " +
+                            "{customer}, {items}, {item_count}, " +
                             "{subtotal}, {discount}, {total}, " +
                             "{payment}, {paid}, {change}",
                         style = MaterialTheme.typography.bodySmall,
