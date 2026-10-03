@@ -219,7 +219,6 @@ fun CustomersScreen(
                 editing = CustomerEntity(
                     barcode = "",
                     name = profile.fullName,
-                    address = profile.placeOfBirth,
                     identitySource = "PHILSYS_QR",
                     identityVerified = false
                 )
