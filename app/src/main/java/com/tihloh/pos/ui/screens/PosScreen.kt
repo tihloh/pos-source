@@ -42,6 +42,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.tihloh.pos.data.CustomerEntity
 import com.tihloh.pos.data.PosRepository
 import com.tihloh.pos.data.ProductEntity
 import com.tihloh.pos.data.SaleDetail
@@ -62,9 +63,13 @@ fun PosScreen(
     cart: SnapshotStateList<CartLine>,
     scannedProduct: ProductEntity?,
     onScannedProductHandled: () -> Unit,
-    onScanRequest: () -> Unit
+    scannedCustomer: CustomerEntity?,
+    onScannedCustomerHandled: () -> Unit,
+    onProductScanRequest: () -> Unit,
+    onCustomerScanRequest: () -> Unit
 ) {
     val products by repository.products.collectAsState(initial = emptyList())
+    val customers by repository.customers.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var query by remember { mutableStateOf("") }
@@ -72,11 +77,20 @@ fun PosScreen(
     var checkout by remember { mutableStateOf(false) }
     var completedSale by remember { mutableStateOf<SaleDetail?>(null) }
     var quantityProduct by remember { mutableStateOf<ProductEntity?>(null) }
+    var selectedCustomer by remember { mutableStateOf<CustomerEntity?>(null) }
+    var customerPicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(scannedProduct?.id) {
         val product = scannedProduct ?: return@LaunchedEffect
         quantityProduct = product
         onScannedProductHandled()
+    }
+
+    LaunchedEffect(scannedCustomer?.id) {
+        val customer = scannedCustomer ?: return@LaunchedEffect
+        selectedCustomer = customer
+        customerPicker = false
+        onScannedCustomerHandled()
     }
 
     val total = cart.sumOf { (it.product.sellingPriceCents * it.quantity).roundToLong() }
@@ -123,9 +137,40 @@ fun PosScreen(
             value = query,
             onValueChange = { query = it },
             label = "Search product / barcode",
-            onScan = onScanRequest
+            onScan = onProductScanRequest
         )
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            onClick = { customerPicker = true }
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Customer", style = MaterialTheme.typography.labelMedium)
+                    Text(
+                        selectedCustomer?.name ?: "Walk-in customer",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    selectedCustomer?.careOf?.let {
+                        Text(
+                            "Care of: $it",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Text(
+                    if (selectedCustomer == null) "Select" else "Change",
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+
 
         if (query.isNotBlank()) {
             LazyColumn(
@@ -277,24 +322,45 @@ fun PosScreen(
     if (checkout) {
         CheckoutDialog(
             totalCents = total,
+            customer = selectedCustomer,
             onDismiss = { checkout = false },
-            onCheckout = { paymentType, amountPaid, reference ->
+            onCheckout = { paymentType, amountPaid, reference, careOf ->
                 scope.launch {
                     runCatching {
                         repository.checkout(
                             lines = cart.map { SaleLineInput(it.product.id, it.quantity) },
                             paymentType = paymentType,
                             amountPaidCents = amountPaid,
-                            paymentReference = reference
+                            paymentReference = reference,
+                            customerId = selectedCustomer?.id,
+                            careOf = careOf
                         )
                     }.onSuccess {
                         completedSale = it
                         cart.clear()
+                        selectedCustomer = null
                         checkout = false
                     }.onFailure {
                         error = it.message ?: "Checkout failed."
                     }
                 }
+            }
+        )
+    }
+
+    if (customerPicker) {
+        CustomerPickerDialog(
+            customers = customers,
+            selected = selectedCustomer,
+            onDismiss = { customerPicker = false },
+            onScan = onCustomerScanRequest,
+            onSelect = {
+                selectedCustomer = it
+                customerPicker = false
+            },
+            onWalkIn = {
+                selectedCustomer = null
+                customerPicker = false
             }
         )
     }
@@ -400,12 +466,19 @@ private fun QuantityDialog(
 @Composable
 private fun CheckoutDialog(
     totalCents: Long,
+    customer: CustomerEntity?,
     onDismiss: () -> Unit,
-    onCheckout: (paymentType: String, amountPaidCents: Long, reference: String?) -> Unit
+    onCheckout: (
+        paymentType: String,
+        amountPaidCents: Long,
+        reference: String?,
+        careOf: String?
+    ) -> Unit
 ) {
     var paymentType by remember { mutableStateOf("Cash") }
     var amount by remember(totalCents) { mutableStateOf("") }
     var reference by remember { mutableStateOf("") }
+    var careOf by remember(customer?.id) { mutableStateOf(customer?.careOf.orEmpty()) }
     val paid = parseMoneyToCents(amount)
     val valid = paid != null && paid >= totalCents
     val change = if (paid != null && paid >= totalCents) paid - totalCents else 0
@@ -424,6 +497,28 @@ private fun CheckoutDialog(
                             color = MaterialTheme.colorScheme.primary
                         )
                     }
+                }
+
+                if (customer != null) {
+                    Card(Modifier.fillMaxWidth()) {
+                        Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                            Text("Customer", style = MaterialTheme.typography.labelMedium)
+                            Text(customer.name, style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                customer.barcode,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = careOf,
+                        onValueChange = { careOf = it },
+                        label = { Text("Care of") },
+                        supportingText = { Text("Optional for this sale.") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
 
                 Text("Payment method", style = MaterialTheme.typography.labelLarge)
@@ -510,10 +605,83 @@ private fun CheckoutDialog(
         },
         confirmButton = {
             Button(
-                onClick = { onCheckout(paymentType, paid ?: 0L, reference.ifBlank { null }) },
+                onClick = {
+                    onCheckout(
+                        paymentType,
+                        paid ?: 0L,
+                        reference.ifBlank { null },
+                        careOf.ifBlank { null }
+                    )
+                },
                 enabled = valid
             ) { Text("Pay & Save") }
         },
         dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+
+@Composable
+private fun CustomerPickerDialog(
+    customers: List<CustomerEntity>,
+    selected: CustomerEntity?,
+    onDismiss: () -> Unit,
+    onScan: () -> Unit,
+    onSelect: (CustomerEntity) -> Unit,
+    onWalkIn: () -> Unit
+) {
+    var query by remember { mutableStateOf("") }
+    val filtered = remember(customers, query) {
+        customers.filter {
+            query.isBlank() ||
+                it.name.contains(query, true) ||
+                it.barcode.contains(query, true) ||
+                it.phone.orEmpty().contains(query, true)
+        }.take(50)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Select customer") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ScanTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    label = "Name / barcode / phone",
+                    onScan = onScan
+                )
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(filtered, key = { it.id }) { customer ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { onSelect(customer) }
+                        ) {
+                            Column(Modifier.fillMaxWidth().padding(10.dp)) {
+                                Text(customer.name, style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    customer.barcode +
+                                        (customer.careOf?.let { " · C/O $it" } ?: ""),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (selected?.id == customer.id) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            OutlinedButton(onClick = onWalkIn) { Text("Walk-in") }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) { Text("Close") }
+        }
     )
 }
