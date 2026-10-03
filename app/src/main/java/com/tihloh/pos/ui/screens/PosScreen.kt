@@ -511,15 +511,21 @@ private fun CheckoutDialog(
                             )
                         }
                     }
-                    OutlinedTextField(
-                        value = careOf,
-                        onValueChange = { careOf = it },
-                        label = { Text("Care of") },
-                        supportingText = { Text("Optional for this sale.") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
                 }
+
+                OutlinedTextField(
+                    value = careOf,
+                    onValueChange = { careOf = it },
+                    label = { Text("Care of") },
+                    supportingText = {
+                        Text(
+                            if (customer == null) "Optional C/O for this walk-in sale."
+                            else "Optional for this sale."
+                        )
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
 
                 Text("Payment method", style = MaterialTheme.typography.labelLarge)
                 Row(
