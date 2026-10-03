@@ -13,6 +13,8 @@ Local-first Android POS and inventory app focused on fast scanner-driven retail 
 - Sales history with Today / 7 Days / 30 Days / All scopes, receipt search, transaction count, and totals
 - Checkout with blank payment entry plus one-tap **Exact** amount
 - Network ESC/POS receipt printer support (TCP, typically port 9100)
+- Bluetooth ESC/POS receipt printer support
+- Receipt editor with store name and placeholders
 - Receipt reprint from Sales and print immediately after checkout
 - Local Room database remains the operational source of truth
 - Product image picker with app-local image storage
@@ -102,3 +104,24 @@ The Release APK workflow builds a signed APK and creates the matching GitHub Rel
 ## Package
 
 `com.tihloh.pos`
+
+
+## Receipt templates
+
+The receipt can be customized from **More → Receipt printer**.
+
+Supported placeholders:
+
+`{store}`, `{receipt}`, `{date}`, `{time}`, `{datetime}`, `{items}`,
+`{item_count}`, `{subtotal}`, `{discount}`, `{total}`, `{payment}`,
+`{paid}`, `{change}`.
+
+The store name is stored with printer/receipt settings and is applied to printed receipts.
+
+## About
+
+The app includes **More → About** with app/version details and developer attribution:
+
+**Christian Borsal Bustamante**  
+Full Stack Software Developer | IT Professional | Systems & Automation  
+GitHub: **tihloh**
