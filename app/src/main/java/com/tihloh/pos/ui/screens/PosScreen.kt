@@ -141,7 +141,7 @@ fun PosScreen(
                         ) {
                             ProductThumbnail(
                                 imageUrl = product.imageUrl,
-                                size = 50.dp
+                                size = 70.dp
                             )
                             Column(Modifier.weight(1f)) {
                                 Text(product.name, style = MaterialTheme.typography.titleSmall)
@@ -190,7 +190,7 @@ fun PosScreen(
                         ) {
                             ProductThumbnail(
                                 imageUrl = line.product.imageUrl,
-                                size = 46.dp
+                                size = 62.dp
                             )
                             Column(Modifier.weight(1f)) {
                                 Text(line.product.name, style = MaterialTheme.typography.titleMedium)
