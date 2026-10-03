@@ -4,25 +4,39 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import com.tihloh.pos.security.PinStore
 import com.tihloh.pos.ui.PosRoot
 import com.tihloh.pos.ui.theme.PosTheme
+import com.tihloh.pos.ui.theme.ThemeMode
+import com.tihloh.pos.ui.theme.ThemeSettings
 
 class MainActivity : FragmentActivity() {
     private lateinit var pinStore: PinStore
+    private lateinit var themeSettings: ThemeSettings
+    private var themeMode by mutableStateOf(ThemeMode.SYSTEM)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         pinStore = PinStore(this)
+        themeSettings = ThemeSettings(this)
+        themeMode = themeSettings.load()
 
         setContent {
-            PosTheme {
+            PosTheme(mode = themeMode) {
                 PosRoot(
                     pinStore = pinStore,
                     biometricAvailable = biometricAvailable(),
-                    requestBiometric = ::authenticateBiometric
+                    requestBiometric = ::authenticateBiometric,
+                    themeMode = themeMode,
+                    onThemeModeChange = {
+                        themeMode = it
+                        themeSettings.save(it)
+                    }
                 )
             }
         }
