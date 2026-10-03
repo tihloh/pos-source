@@ -1,5 +1,7 @@
 package com.tihloh.pos.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,12 +38,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.tihloh.pos.data.PosRepository
 import com.tihloh.pos.data.ProductEntity
 import com.tihloh.pos.data.SupplierEntity
+import com.tihloh.pos.product.ProductImageStore
 import com.tihloh.pos.product.ProductLookupOutcome
 import com.tihloh.pos.product.ProductLookupService
 import com.tihloh.pos.ui.NetworkImage
@@ -320,6 +324,15 @@ private fun ProductEditorDialog(
 ) {
     var draft by remember(initial) { mutableStateOf(initial) }
     val isNew = initial.id == 0L
+    val context = LocalContext.current
+    val imagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            runCatching { ProductImageStore.save(context, uri) }
+                .onSuccess { draft = draft.copy(imageUrl = it) }
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -402,12 +415,27 @@ private fun ProductEditorDialog(
                         }
                     }
                 }
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            "Product image",
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedButton(onClick = { imagePicker.launch("image/*") }) {
+                            Text(if (draft.imageUrl.isBlank()) "Choose image" else "Change")
+                        }
+                    }
+                }
                 if (draft.imageUrl.isNotBlank()) {
                     item {
-                        Text("Product image", style = MaterialTheme.typography.labelMedium)
                         NetworkImage(
                             url = draft.imageUrl,
-                            modifier = Modifier.fillMaxWidth().height(160.dp)
+                            modifier = Modifier.fillMaxWidth().height(150.dp)
                         )
                     }
                 }
