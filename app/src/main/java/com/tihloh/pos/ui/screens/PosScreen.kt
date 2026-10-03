@@ -48,6 +48,7 @@ import com.tihloh.pos.data.SaleDetail
 import com.tihloh.pos.data.SaleLineInput
 import com.tihloh.pos.printer.ReceiptPrinter
 import com.tihloh.pos.printer.toReceiptData
+import com.tihloh.pos.ui.ProductThumbnail
 import com.tihloh.pos.ui.ScanTextField
 import com.tihloh.pos.ui.money
 import com.tihloh.pos.ui.parseMoneyToCents
@@ -138,6 +139,10 @@ fun PosScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
+                            ProductThumbnail(
+                                imageUrl = product.imageUrl,
+                                size = 50.dp
+                            )
                             Column(Modifier.weight(1f)) {
                                 Text(product.name, style = MaterialTheme.typography.titleSmall)
                                 Text(
@@ -180,8 +185,13 @@ fun PosScreen(
                     Card(Modifier.fillMaxWidth()) {
                         Row(
                             Modifier.padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
+                            ProductThumbnail(
+                                imageUrl = line.product.imageUrl,
+                                size = 46.dp
+                            )
                             Column(Modifier.weight(1f)) {
                                 Text(line.product.name, style = MaterialTheme.typography.titleMedium)
                                 Text(
