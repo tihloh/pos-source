@@ -41,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.tihloh.pos.data.CustomerEntity
 import com.tihloh.pos.data.PosRepository
@@ -107,30 +108,28 @@ fun PosScreen(
         Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Card(
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            )
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(
-                    Icons.Default.PointOfSale,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
+            Icon(
+                Icons.Default.PointOfSale,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                "POS",
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.weight(1f)
+            )
+            if (cart.isNotEmpty()) {
+                Text(
+                    "${cart.sumOf { it.quantity }.let(::quantity)} item" +
+                        if (cart.sumOf { it.quantity } == 1.0) "" else "s",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Column {
-                    Text("POS", style = MaterialTheme.typography.headlineSmall)
-                    Text(
-                        "Scan, sell, and checkout quickly",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
             }
         }
         ScanTextField(
@@ -156,13 +155,6 @@ fun PosScreen(
                         selectedCustomer?.name ?: "Walk-in customer",
                         style = MaterialTheme.typography.titleSmall
                     )
-                    selectedCustomer?.careOf?.let {
-                        Text(
-                            "Care of: $it",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
                 }
                 Text(
                     if (selectedCustomer == null) "Select" else "Change",
@@ -173,50 +165,129 @@ fun PosScreen(
 
 
         if (query.isNotBlank()) {
-            LazyColumn(
-                modifier = Modifier.weight(0.35f),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                items(filtered, key = { it.id }) { product ->
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(112.dp)
+                Column(Modifier.weight(1f)) {
+                    Text("Search results", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (filtered.isEmpty()) "No matching products"
+                        else "${filtered.size} matching product" +
+                            if (filtered.size == 1) "" else "s",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                TextButton(onClick = { query = "" }) { Text("Clear") }
+            }
+
+            if (filtered.isEmpty()) {
+                Card(Modifier.fillMaxWidth().weight(1f)) {
+                    Column(
+                        Modifier.fillMaxSize().padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
-                        Row(
+                        Text("No product found", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Try another name, SKU, barcode, or use the scanner.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    items(filtered, key = { it.id }) { product ->
+                        val available = !product.inventoryEnabled || product.stockCache > 0
+                        Card(
                             modifier = Modifier
-                                .fillMaxSize()
-                                .padding(10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                .fillMaxWidth()
+                                .height(104.dp),
+                            onClick = {
+                                quantityProduct = product
+                                query = ""
+                            },
+                            enabled = available
                         ) {
-                            ProductThumbnail(
-                                imageUrl = product.imageUrl,
-                                width = 92.dp
-                            )
-                            Column(Modifier.weight(1f)) {
-                                Text(product.name, style = MaterialTheme.typography.titleSmall)
-                                Text(
-                                    "${money(product.sellingPriceCents)} · " +
-                                        if (product.inventoryEnabled) "Stock ${quantity(product.stockCache)}"
-                                        else "Non-stock"
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(9.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                ProductThumbnail(
+                                    imageUrl = product.imageUrl,
+                                    width = 82.dp
                                 )
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Text(
+                                        product.name,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    val code = product.barcode ?: product.sku
+                                    if (!code.isNullOrBlank()) {
+                                        Text(
+                                            code,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            money(product.sellingPriceCents),
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text(
+                                            if (product.inventoryEnabled) {
+                                                if (product.stockCache > 0) {
+                                                    "Stock ${quantity(product.stockCache)}"
+                                                } else {
+                                                    "Out of stock"
+                                                }
+                                            } else {
+                                                "Non-stock"
+                                            },
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = if (available) {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            } else {
+                                                MaterialTheme.colorScheme.error
+                                            }
+                                        )
+                                    }
+                                }
+                                if (available) {
+                                    Icon(
+                                        Icons.Default.Add,
+                                        contentDescription = "Add to cart",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                             }
-                            Button(
-                                onClick = {
-                                    quantityProduct = product
-                                    query = ""
-                                },
-                                enabled = !product.inventoryEnabled || product.stockCache > 0
-                            ) { Text("Add") }
                         }
                     }
                 }
             }
-        }
-
-        Text("Cart", style = MaterialTheme.typography.titleLarge)
-        if (cart.isEmpty()) {
+        } else {
+            Text("Cart", style = MaterialTheme.typography.titleLarge)
+            if (cart.isEmpty()) {
             Card(Modifier.fillMaxWidth().weight(1f)) {
                 Column(
                     Modifier.fillMaxSize().padding(20.dp),
@@ -280,6 +351,7 @@ fun PosScreen(
                 }
             }
         }
+        }
 
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -293,7 +365,11 @@ fun PosScreen(
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
             Column(Modifier.weight(1f)) {
-                Text("TOTAL", style = MaterialTheme.typography.labelLarge)
+                Text(
+                    if (cart.isEmpty()) "CART TOTAL" else
+                        "CART · ${cart.sumOf { it.quantity }.let(::quantity)} items",
+                    style = MaterialTheme.typography.labelLarge
+                )
                 Text(money(total), style = MaterialTheme.typography.headlineSmall)
             }
                 Button(
