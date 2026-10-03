@@ -14,6 +14,7 @@ import com.tihloh.pos.ui.PosRoot
 import com.tihloh.pos.ui.theme.PosTheme
 import com.tihloh.pos.ui.theme.ThemeMode
 import com.tihloh.pos.ui.theme.ThemeSettings
+import com.tihloh.pos.update.UpdateScheduler
 
 class MainActivity : FragmentActivity() {
     private lateinit var pinStore: PinStore
@@ -25,6 +26,7 @@ class MainActivity : FragmentActivity() {
         pinStore = PinStore(this)
         themeSettings = ThemeSettings(this)
         themeMode = themeSettings.load()
+        UpdateScheduler.schedule(applicationContext)
 
         setContent {
             PosTheme(mode = themeMode) {
