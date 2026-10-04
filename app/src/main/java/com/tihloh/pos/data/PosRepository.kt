@@ -23,6 +23,8 @@ class PosRepository(private val db: AppDatabase) {
     val suppliers = db.suppliers().observeAll()
     val customers = db.customers().observeAll()
     val inventoryTransactions = db.inventory().observeAll()
+    val customerPayments = db.customerPayments().observeAll()
+    val auditLogs = db.auditLogs().observeLatest()
 
     suspend fun findByBarcode(barcode: String): ProductEntity? {
         val raw = barcode.trim()
@@ -250,6 +252,132 @@ class PosRepository(private val db: AppDatabase) {
         )
     }
 
+    suspend fun receiveCustomerPayment(
+        customerId: Long,
+        amountCents: Long,
+        paymentType: String,
+        reference: String? = null
+    ): CustomerPaymentEntity = db.withTransaction {
+        require(amountCents > 0L) { "Payment amount must be greater than zero." }
+        require(paymentType.isNotBlank()) { "Payment method is required." }
+        val customer = db.customers().getById(customerId) ?: error("Customer not found.")
+        val payableSales = db.sales().getRange(0L, Long.MAX_VALUE)
+            .filter {
+                it.customerId == customerId &&
+                    it.status == "ACCOUNT_PAYABLE" &&
+                    it.totalCents > it.amountPaidCents
+            }
+            .sortedBy { it.createdAt }
+
+        val outstanding = payableSales.sumOf {
+            (it.totalCents - it.amountPaidCents).coerceAtLeast(0L)
+        }
+        require(outstanding > 0L) { "This customer has no outstanding account balance." }
+        require(amountCents <= outstanding) {
+            "Payment exceeds the outstanding balance of " + outstanding + " cents."
+        }
+
+        val payment = CustomerPaymentEntity(
+            customerId = customerId,
+            amountCents = amountCents,
+            paymentType = paymentType,
+            reference = reference?.trim()?.ifBlank { null }
+        )
+        val paymentId = db.customerPayments().insert(payment)
+
+        var remaining = amountCents
+        val allocations = mutableListOf<CustomerPaymentAllocationEntity>()
+        for (sale in payableSales) {
+            if (remaining <= 0L) break
+            val due = (sale.totalCents - sale.amountPaidCents).coerceAtLeast(0L)
+            if (due <= 0L) continue
+            val applied = minOf(remaining, due)
+            val newPaid = sale.amountPaidCents + applied
+            db.sales().updatePaymentState(
+                saleId = sale.id,
+                amountPaidCents = newPaid,
+                status = if (newPaid >= sale.totalCents) "ACCOUNT_PAID" else "ACCOUNT_PAYABLE"
+            )
+            db.sales().addPayments(
+                listOf(
+                    PaymentEntity(
+                        saleId = sale.id,
+                        type = paymentType,
+                        amountCents = applied,
+                        reference = reference?.trim()?.ifBlank { null }
+                    )
+                )
+            )
+            allocations += CustomerPaymentAllocationEntity(
+                paymentId = paymentId,
+                saleId = sale.id,
+                amountCents = applied
+            )
+            remaining -= applied
+        }
+        db.customerPayments().insertAllocations(allocations)
+        db.auditLogs().insert(
+            AuditLogEntity(
+                action = "CUSTOMER_PAYMENT",
+                entityType = "CUSTOMER",
+                entityId = customerId,
+                summary = "Received account payment from ${customer.name}",
+                metadata = "paymentId=$paymentId;amountCents=$amountCents;method=$paymentType"
+            )
+        )
+        payment.copy(id = paymentId)
+    }
+
+    suspend fun customerPaymentHistory(customerId: Long): List<CustomerPaymentEntity> =
+        db.customerPayments().forCustomer(customerId)
+
+    suspend fun deleteSale(
+        saleId: Long,
+        reason: String,
+        authMethod: String
+    ) = db.withTransaction {
+        val cleanReason = reason.trim()
+        require(cleanReason.length >= 3) { "Deletion reason is required." }
+        val sale = db.sales().getSale(saleId) ?: error("Sale not found.")
+        require(sale.status != "DELETED") { "Sale is already deleted." }
+
+        if (sale.status == "ACCOUNT_PAYABLE" || sale.status == "ACCOUNT_PAID") {
+            require(sale.amountPaidCents == 0L) {
+                "A sale with account payments cannot be deleted because payments have already been applied."
+            }
+        }
+
+        val items = db.sales().getItems(saleId)
+        items.forEach { item ->
+            val product = db.products().getById(item.productId) ?: return@forEach
+            if (product.inventoryEnabled) {
+                db.inventory().add(
+                    InventoryTransactionEntity(
+                        productId = product.id,
+                        type = "SALE_DELETE_REVERSAL",
+                        quantityDelta = item.quantity,
+                        unitCostCents = product.costCents,
+                        referenceType = "SALE",
+                        referenceId = saleId,
+                        note = "Deleted ${sale.receiptNumber}: $cleanReason"
+                    )
+                )
+                db.products().adjustStock(product.id, item.quantity)
+            }
+        }
+
+        db.sales().markDeleted(saleId)
+        db.auditLogs().insert(
+            AuditLogEntity(
+                action = "SALE_DELETE",
+                entityType = "SALE",
+                entityId = saleId,
+                summary = "Deleted sale ${sale.receiptNumber}",
+                metadata = "reason=$cleanReason;totalCents=${sale.totalCents};customer=${sale.customerName.orEmpty()}",
+                authMethod = authMethod
+            )
+        )
+    }
     suspend fun salesRange(from: Long, to: Long): List<SaleEntity> =
         db.sales().getRange(from, to)
 
