@@ -184,3 +184,50 @@ data class ProductSupplierCrossRef(
     val supplierCostCents: Long? = null,
     val supplierSku: String? = null
 )
+
+
+@Entity(indices = [Index("customerId"), Index("createdAt")])
+data class CustomerPaymentEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val customerId: Long,
+    val amountCents: Long,
+    val paymentType: String,
+    val reference: String? = null,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Entity(
+    primaryKeys = ["paymentId", "saleId"],
+    indices = [Index("paymentId"), Index("saleId")],
+    foreignKeys = [
+        ForeignKey(
+            entity = CustomerPaymentEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["paymentId"],
+            onDelete = ForeignKey.CASCADE
+        ),
+        ForeignKey(
+            entity = SaleEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["saleId"],
+            onDelete = ForeignKey.RESTRICT
+        )
+    ]
+)
+data class CustomerPaymentAllocationEntity(
+    val paymentId: Long,
+    val saleId: Long,
+    val amountCents: Long
+)
+
+@Entity(indices = [Index("action"), Index("entityType"), Index("entityId"), Index("createdAt")])
+data class AuditLogEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val action: String,
+    val entityType: String,
+    val entityId: Long? = null,
+    val summary: String,
+    val metadata: String? = null,
+    val authMethod: String? = null,
+    val createdAt: Long = System.currentTimeMillis()
+)
