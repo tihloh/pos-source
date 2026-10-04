@@ -109,7 +109,13 @@ fun PosRoot(
         return
     }
 
-    MainShell(themeMode, onThemeModeChange)
+    MainShell(
+        themeMode = themeMode,
+        onThemeModeChange = onThemeModeChange,
+        verifyPin = pinStore::verify,
+        biometricAvailable = biometricAvailable,
+        requestBiometric = requestBiometric
+    )
 }
 
 @Composable
@@ -191,7 +197,10 @@ private fun CenteredPanel(title: String, content: @Composable () -> Unit) {
 @Composable
 private fun MainShell(
     themeMode: ThemeMode,
-    onThemeModeChange: (ThemeMode) -> Unit
+    onThemeModeChange: (ThemeMode) -> Unit,
+    verifyPin: (String) -> Boolean,
+    biometricAvailable: Boolean,
+    requestBiometric: (() -> Unit) -> Unit
 ) {
     val context = LocalContext.current
     val repository = remember {
@@ -428,7 +437,12 @@ private fun MainShell(
                     onProductScanRequest = { scannerMode = ScannerMode.POS },
                     onCustomerScanRequest = { scannerMode = ScannerMode.POS_CUSTOMER }
                 )
-                MainScreen.SALES -> SalesScreen(repository)
+                MainScreen.SALES -> SalesScreen(
+                    repository = repository,
+                    verifyPin = verifyPin,
+                    biometricAvailable = biometricAvailable,
+                    requestBiometric = requestBiometric
+                )
                 MainScreen.INVENTORY -> InventoryScreen(
                     repository = repository,
                     scannedProduct = inventoryScannedProduct,
