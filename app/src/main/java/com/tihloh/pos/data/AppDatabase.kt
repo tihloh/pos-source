@@ -17,9 +17,12 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SaleItemEntity::class,
         PaymentEntity::class,
         InventoryPeriodEntity::class,
-        ProductSupplierCrossRef::class
+        ProductSupplierCrossRef::class,
+        CustomerPaymentEntity::class,
+        CustomerPaymentAllocationEntity::class,
+        AuditLogEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -29,6 +32,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun suppliers(): SupplierDao
     abstract fun customers(): CustomerDao
     abstract fun productSuppliers(): ProductSupplierDao
+    abstract fun customerPayments(): CustomerPaymentDao
+    abstract fun auditLogs(): AuditLogDao
 
     companion object {
         @Volatile private var instance: AppDatabase? = null
@@ -104,13 +109,66 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS CustomerPaymentEntity (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        customerId INTEGER NOT NULL,
+                        amountCents INTEGER NOT NULL,
+                        paymentType TEXT NOT NULL,
+                        reference TEXT,
+                        createdAt INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_CustomerPaymentEntity_customerId ON CustomerPaymentEntity(customerId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_CustomerPaymentEntity_createdAt ON CustomerPaymentEntity(createdAt)")
+
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS CustomerPaymentAllocationEntity (
+                        paymentId INTEGER NOT NULL,
+                        saleId INTEGER NOT NULL,
+                        amountCents INTEGER NOT NULL,
+                        PRIMARY KEY(paymentId, saleId),
+                        FOREIGN KEY(paymentId) REFERENCES CustomerPaymentEntity(id) ON DELETE CASCADE,
+                        FOREIGN KEY(saleId) REFERENCES SaleEntity(id) ON DELETE RESTRICT
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_CustomerPaymentAllocationEntity_paymentId ON CustomerPaymentAllocationEntity(paymentId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_CustomerPaymentAllocationEntity_saleId ON CustomerPaymentAllocationEntity(saleId)")
+
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS AuditLogEntity (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        action TEXT NOT NULL,
+                        entityType TEXT NOT NULL,
+                        entityId INTEGER,
+                        summary TEXT NOT NULL,
+                        metadata TEXT,
+                        authMethod TEXT,
+                        createdAt INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_AuditLogEntity_action ON AuditLogEntity(action)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_AuditLogEntity_entityType ON AuditLogEntity(entityType)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_AuditLogEntity_entityId ON AuditLogEntity(entityId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_AuditLogEntity_createdAt ON AuditLogEntity(createdAt)")
+            }
+        }
+
         fun get(context: Context): AppDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext,
                 AppDatabase::class.java,
                 "pos.db"
             )
-.addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+.addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
                 .also { instance = it }
         }
