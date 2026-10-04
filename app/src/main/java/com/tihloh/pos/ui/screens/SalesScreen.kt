@@ -1,9 +1,11 @@
 package com.tihloh.pos.ui.screens
 
+import android.app.DatePickerDialog
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,7 +48,9 @@ private enum class SalesScope(val label: String) {
     TODAY("Today"),
     WEEK("7 Days"),
     MONTH("30 Days"),
-    ALL("All")
+    ALL("All"),
+    DATE("Date"),
+    RANGE("Range")
 }
 
 @Composable
@@ -58,25 +62,32 @@ fun SalesScreen(repository: PosRepository) {
     var error by remember { mutableStateOf<String?>(null) }
     var selectedScope by remember { mutableStateOf(SalesScope.TODAY) }
     var query by remember { mutableStateOf("") }
+    var customFrom by remember { mutableStateOf<Long?>(null) }
+    var customTo by remember { mutableStateOf<Long?>(null) }
 
     val now = System.currentTimeMillis()
-    val from = remember(selectedScope, now / 60_000) {
+    val quickFrom = remember(selectedScope, now / 60_000) {
         when (selectedScope) {
-            SalesScope.TODAY -> Calendar.getInstance().apply {
-                set(Calendar.HOUR_OF_DAY, 0)
-                set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-            }.timeInMillis
+            SalesScope.TODAY -> startOfDay(now)
             SalesScope.WEEK -> now - 7L * 24 * 60 * 60 * 1000
             SalesScope.MONTH -> now - 30L * 24 * 60 * 60 * 1000
-            SalesScope.ALL -> 0L
+            SalesScope.ALL, SalesScope.DATE, SalesScope.RANGE -> 0L
         }
     }
 
-    val filtered = remember(allSales, selectedScope, query, from) {
+    val from = when (selectedScope) {
+        SalesScope.DATE, SalesScope.RANGE -> customFrom ?: 0L
+        else -> quickFrom
+    }
+    val to = when (selectedScope) {
+        SalesScope.DATE -> customFrom?.let(::endOfDay) ?: Long.MAX_VALUE
+        SalesScope.RANGE -> customTo?.let(::endOfDay) ?: Long.MAX_VALUE
+        else -> Long.MAX_VALUE
+    }
+
+    val filtered = remember(allSales, selectedScope, query, from, to) {
         allSales.filter {
-            it.createdAt >= from &&
+            it.createdAt in from..to &&
                 (
                     query.isBlank() ||
                         it.receiptNumber.contains(query, ignoreCase = true) ||
@@ -94,17 +105,54 @@ fun SalesScreen(repository: PosRepository) {
     ) {
         Text("Sales", style = MaterialTheme.typography.headlineMedium)
 
-        Row(
+        FlowRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            SalesScope.entries.forEach {
+            SalesScope.entries.forEach { option ->
                 FilterChip(
-                    selected = selectedScope == it,
-                    onClick = { selectedScope = it },
-                    label = { Text(it.label) }
+                    selected = selectedScope == option,
+                    onClick = {
+                        when (option) {
+                            SalesScope.DATE -> {
+                                pickDate(context, customFrom ?: now) { selected ->
+                                    customFrom = startOfDay(selected)
+                                    customTo = customFrom
+                                    selectedScope = SalesScope.DATE
+                                }
+                            }
+                            SalesScope.RANGE -> {
+                                pickDate(context, customFrom ?: now) { start ->
+                                    pickDate(context, customTo ?: start) { end ->
+                                        val first = minOf(startOfDay(start), startOfDay(end))
+                                        val last = maxOf(startOfDay(start), startOfDay(end))
+                                        customFrom = first
+                                        customTo = last
+                                        selectedScope = SalesScope.RANGE
+                                    }
+                                }
+                            }
+                            else -> selectedScope = option
+                        }
+                    },
+                    label = { Text(option.label) }
                 )
             }
+        }
+
+        if (selectedScope == SalesScope.DATE && customFrom != null) {
+            Text(
+                "Showing ${formatFilterDate(customFrom!!)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else if (selectedScope == SalesScope.RANGE && customFrom != null && customTo != null) {
+            Text(
+                "Showing ${formatFilterDate(customFrom!!)} – ${formatFilterDate(customTo!!)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
 
         OutlinedTextField(
@@ -155,7 +203,7 @@ fun SalesScreen(repository: PosRepository) {
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 
         if (filtered.isEmpty()) {
-            Text("No sales in this scope.")
+            Text("No sales in the selected period.")
         } else {
             LazyColumn(
                 modifier = Modifier.weight(1f),
@@ -270,4 +318,52 @@ fun SalesScreen(repository: PosRepository) {
             }
         )
     }
+}
+
+
+private fun startOfDay(millis: Long): Long =
+    Calendar.getInstance().apply {
+        timeInMillis = millis
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+private fun endOfDay(millis: Long): Long =
+    Calendar.getInstance().apply {
+        timeInMillis = millis
+        set(Calendar.HOUR_OF_DAY, 23)
+        set(Calendar.MINUTE, 59)
+        set(Calendar.SECOND, 59)
+        set(Calendar.MILLISECOND, 999)
+    }.timeInMillis
+
+private fun formatFilterDate(millis: Long): String =
+    DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(millis))
+
+private fun pickDate(
+    context: android.content.Context,
+    initialMillis: Long,
+    onSelected: (Long) -> Unit
+) {
+    val initial = Calendar.getInstance().apply { timeInMillis = initialMillis }
+    DatePickerDialog(
+        context,
+        { _, year, month, day ->
+            val selected = Calendar.getInstance().apply {
+                set(Calendar.YEAR, year)
+                set(Calendar.MONTH, month)
+                set(Calendar.DAY_OF_MONTH, day)
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            onSelected(selected.timeInMillis)
+        },
+        initial.get(Calendar.YEAR),
+        initial.get(Calendar.MONTH),
+        initial.get(Calendar.DAY_OF_MONTH)
+    ).show()
 }
