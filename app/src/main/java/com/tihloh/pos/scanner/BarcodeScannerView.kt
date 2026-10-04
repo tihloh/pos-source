@@ -45,6 +45,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.barcode.BarcodeScanner
 import com.google.mlkit.vision.barcode.BarcodeScanning
@@ -61,12 +63,17 @@ fun BarcodeScannerView(onScanned: (String) -> Unit, onBack: () -> Unit) {
                 PackageManager.PERMISSION_GRANTED
         )
     }
+    var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted = it }
 
     LaunchedEffect(Unit) {
         if (!granted) permissionLauncher.launch(Manifest.permission.CAMERA)
+    }
+
+    DisposableEffect(Unit) {
+        onDispose { cameraProvider?.unbindAll() }
     }
 
     Box(
@@ -86,6 +93,7 @@ fun BarcodeScannerView(onScanned: (String) -> Unit, onBack: () -> Unit) {
                         val future = ProcessCameraProvider.getInstance(ctx)
                         future.addListener({
                             val provider = future.get()
+                            cameraProvider = provider
                             val preview = Preview.Builder().build().also {
                                 it.surfaceProvider = previewView.surfaceProvider
                             }
@@ -255,5 +263,35 @@ private class BarcodeAnalyzer(
                 busy.set(false)
                 imageProxy.close()
             }
+    }
+}
+
+
+@Composable
+fun BarcodeScannerDialog(
+    onScanned: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            shape = RoundedCornerShape(28.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(560.dp)
+            ) {
+                BarcodeScannerView(
+                    onScanned = onScanned,
+                    onBack = onDismiss
+                )
+            }
+        }
     }
 }
