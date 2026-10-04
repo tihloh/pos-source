@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material3.AlertDialog
@@ -66,6 +67,8 @@ import com.tihloh.pos.sync.SyncConfig
 import com.tihloh.pos.sync.SyncSettings
 import com.tihloh.pos.ui.theme.ThemeMode
 import kotlinx.coroutines.launch
+import java.text.DateFormat
+import java.util.Date
 
 @Composable
 fun MoreScreen(
@@ -76,6 +79,7 @@ fun MoreScreen(
     onThemeModeChange: (ThemeMode) -> Unit
 ) {
     val suppliers by repository.suppliers.collectAsState(initial = emptyList())
+    val auditLogs by repository.auditLogs.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var editing by remember { mutableStateOf<SupplierEntity?>(null) }
@@ -85,6 +89,7 @@ fun MoreScreen(
     var printerDialog by remember { mutableStateOf(false) }
     var syncDialog by remember { mutableStateOf(false) }
     var aboutDialog by remember { mutableStateOf(false) }
+    var auditDialog by remember { mutableStateOf(false) }
     var syncing by remember { mutableStateOf(false) }
     var pairedDevices by remember { mutableStateOf<List<PairedPrinter>>(emptyList()) }
 
@@ -182,7 +187,26 @@ fun MoreScreen(
                 Column(Modifier.weight(1f)) {
                     Text("Customers", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "Accounts, barcode lookup, and care of",
+                        "Accounts, barcode lookup, and account balances",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth().clickable { auditDialog = true }
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(Icons.Default.History, contentDescription = null)
+                Column(Modifier.weight(1f)) {
+                    Text("Audit log", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Protected sales deletions and account payment activity",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -257,6 +281,63 @@ fun MoreScreen(
                 }
             }
         }
+    }
+
+    if (auditDialog) {
+        AlertDialog(
+            onDismissRequest = { auditDialog = false },
+            title = { Text("Audit log") },
+            text = {
+                if (auditLogs.isEmpty()) {
+                    Text("No logged security or account actions yet.")
+                } else {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(auditLogs, key = { it.id }) { log ->
+                            Card(Modifier.fillMaxWidth()) {
+                                Column(
+                                    Modifier.fillMaxWidth().padding(10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Row(Modifier.fillMaxWidth()) {
+                                        Text(
+                                            log.action.replace('_', ' '),
+                                            style = MaterialTheme.typography.labelLarge,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        log.authMethod?.let {
+                                            Text(
+                                                it,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    }
+                                    Text(log.summary, style = MaterialTheme.typography.bodyMedium)
+                                    log.metadata?.let {
+                                        Text(
+                                            it,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Text(
+                                        DateFormat.getDateTimeInstance(
+                                            DateFormat.MEDIUM,
+                                            DateFormat.SHORT
+                                        ).format(Date(log.createdAt)),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(onClick = { auditDialog = false }) { Text("Close") }
+            }
+        )
     }
 
     if (aboutDialog) {
