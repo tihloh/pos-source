@@ -2,6 +2,7 @@ package com.tihloh.pos.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.tihloh.pos.data.CustomerEntity
+import com.tihloh.pos.data.CustomerPaymentEntity
 import com.tihloh.pos.data.PosRepository
 import com.tihloh.pos.data.SaleEntity
 import com.tihloh.pos.philsys.PhilSysParseResult
@@ -41,6 +43,7 @@ import com.tihloh.pos.philsys.PhilSysProfile
 import com.tihloh.pos.philsys.PhilSysQrParser
 import com.tihloh.pos.ui.ScanTextField
 import com.tihloh.pos.ui.money
+import com.tihloh.pos.ui.parseMoneyToCents
 import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
@@ -58,10 +61,12 @@ fun CustomersScreen(
 ) {
     val customers by repository.customers.collectAsState(initial = emptyList())
     val sales by repository.sales.collectAsState(initial = emptyList())
+    val customerPayments by repository.customerPayments.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf<CustomerEntity?>(null) }
     var accountCustomer by remember { mutableStateOf<CustomerEntity?>(null) }
+    var paymentCustomer by remember { mutableStateOf<CustomerEntity?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var showPhilSysConsent by remember { mutableStateOf(false) }
     var philSysProfile by remember { mutableStateOf<PhilSysProfile?>(null) }
@@ -144,7 +149,9 @@ fun CustomersScreen(
             ) {
                 items(filtered, key = { it.id }) { customer ->
                     val customerPayables = sales.filter {
-                        it.customerId == customer.id && it.status == "ACCOUNT_PAYABLE"
+                        it.customerId == customer.id &&
+                            it.status == "ACCOUNT_PAYABLE" &&
+                            it.totalCents > it.amountPaidCents
                     }
                     val outstanding = customerPayables.sumOf {
                         (it.totalCents - it.amountPaidCents).coerceAtLeast(0L)
@@ -218,16 +225,54 @@ fun CustomersScreen(
 
     accountCustomer?.let { customer ->
         val accountSales = sales.filter {
-            it.customerId == customer.id && it.status == "ACCOUNT_PAYABLE"
+            it.customerId == customer.id &&
+                (it.status == "ACCOUNT_PAYABLE" || it.status == "ACCOUNT_PAID")
         }.sortedByDescending { it.createdAt }
+        val payments = customerPayments.filter { it.customerId == customer.id }
 
         CustomerAccountDialog(
             customer = customer,
             accountSales = accountSales,
+            payments = payments,
             onDismiss = { accountCustomer = null },
+            onReceivePayment = {
+                paymentCustomer = customer
+                accountCustomer = null
+            },
             onEdit = {
                 accountCustomer = null
                 editing = customer
+            }
+        )
+    }
+
+    paymentCustomer?.let { customer ->
+        val outstanding = sales.filter {
+            it.customerId == customer.id &&
+                it.status == "ACCOUNT_PAYABLE" &&
+                it.totalCents > it.amountPaidCents
+        }.sumOf { (it.totalCents - it.amountPaidCents).coerceAtLeast(0L) }
+
+        ReceiveAccountPaymentDialog(
+            customer = customer,
+            outstandingCents = outstanding,
+            onDismiss = { paymentCustomer = null },
+            onSave = { amountCents, paymentType, reference ->
+                scope.launch {
+                    runCatching {
+                        repository.receiveCustomerPayment(
+                            customerId = customer.id,
+                            amountCents = amountCents,
+                            paymentType = paymentType,
+                            reference = reference
+                        )
+                    }.onSuccess {
+                        paymentCustomer = null
+                        accountCustomer = customer
+                    }.onFailure {
+                        error = it.message ?: "Unable to save payment."
+                    }
+                }
             }
         )
     }
@@ -442,12 +487,14 @@ private fun PhilSysReviewDialog(
 private fun CustomerAccountDialog(
     customer: CustomerEntity,
     accountSales: List<SaleEntity>,
+    payments: List<CustomerPaymentEntity>,
     onDismiss: () -> Unit,
+    onReceivePayment: () -> Unit,
     onEdit: () -> Unit
 ) {
-    val outstanding = accountSales.sumOf {
-        (it.totalCents - it.amountPaidCents).coerceAtLeast(0L)
-    }
+    val outstanding = accountSales
+        .filter { it.status == "ACCOUNT_PAYABLE" }
+        .sumOf { (it.totalCents - it.amountPaidCents).coerceAtLeast(0L) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -492,19 +539,25 @@ private fun CustomerAccountDialog(
                     Text(contact, style = MaterialTheme.typography.bodySmall)
                 }
 
-                if (accountSales.isEmpty()) {
+                if (outstanding > 0L) {
+                    Button(onClick = onReceivePayment, modifier = Modifier.fillMaxWidth()) {
+                        Text("Receive payment")
+                    }
+                }
+
+                if (accountSales.isEmpty() && payments.isEmpty()) {
                     Text(
-                        "This customer has no Account Payable sales.",
+                        "This customer has no account activity.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
                     Text("Account activity", style = MaterialTheme.typography.titleSmall)
                     LazyColumn(
-                        modifier = Modifier.heightIn(max = 320.dp),
+                        modifier = Modifier.heightIn(max = 360.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        items(accountSales, key = { it.id }) { sale ->
+                        items(accountSales, key = { "sale-${it.id}" }) { sale ->
                             val due = (sale.totalCents - sale.amountPaidCents).coerceAtLeast(0L)
                             Card(Modifier.fillMaxWidth()) {
                                 Column(
@@ -512,28 +565,40 @@ private fun CustomerAccountDialog(
                                     verticalArrangement = Arrangement.spacedBy(2.dp)
                                 ) {
                                     Row(Modifier.fillMaxWidth()) {
+                                        Text(sale.receiptNumber, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
                                         Text(
-                                            sale.receiptNumber,
+                                            if (due > 0L) money(due) else "Paid",
                                             style = MaterialTheme.typography.titleSmall,
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        Text(
-                                            money(due),
-                                            style = MaterialTheme.typography.titleSmall,
-                                            color = MaterialTheme.colorScheme.error
+                                            color = if (due > 0L) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                                         )
                                     }
                                     Text(
-                                        DateFormat.getDateTimeInstance(
-                                            DateFormat.MEDIUM,
-                                            DateFormat.SHORT
-                                        ).format(Date(sale.createdAt)),
+                                        DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(sale.createdAt)),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     Text(
                                         "Sale ${money(sale.totalCents)} · Paid ${money(sale.amountPaidCents)}",
                                         style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+                        items(payments, key = { "payment-${it.id}" }) { payment ->
+                            Card(Modifier.fillMaxWidth()) {
+                                Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Row(Modifier.fillMaxWidth()) {
+                                        Text("Payment received", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                                        Text(money(payment.amountCents), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                                    }
+                                    Text(
+                                        payment.paymentType + payment.reference?.let { " · $it" }.orEmpty(),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Text(
+                                        DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(payment.createdAt)),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
@@ -548,5 +613,77 @@ private fun CustomerAccountDialog(
         dismissButton = {
             OutlinedButton(onClick = onDismiss) { Text("Close") }
         }
+    )
+}
+
+@Composable
+private fun ReceiveAccountPaymentDialog(
+    customer: CustomerEntity,
+    outstandingCents: Long,
+    onDismiss: () -> Unit,
+    onSave: (Long, String, String?) -> Unit
+) {
+    var amount by remember(customer.id, outstandingCents) { mutableStateOf("") }
+    var paymentType by remember(customer.id) { mutableStateOf("Cash") }
+    var reference by remember(customer.id) { mutableStateOf("") }
+    val parsed = parseMoneyToCents(amount)
+    val valid = parsed != null && parsed > 0L && parsed <= outstandingCents
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Receive account payment") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(customer.name, style = MaterialTheme.typography.titleMedium)
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                        Text("Outstanding balance", style = MaterialTheme.typography.labelMedium)
+                        Text(money(outstandingCents), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                OutlinedTextField(
+                    value = amount,
+                    onValueChange = { amount = it.filter { ch -> ch.isDigit() || ch == '.' } },
+                    label = { Text("Amount received") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedButton(onClick = { amount = "%.2f".format(outstandingCents / 100.0) }) {
+                    Text("Pay full balance")
+                }
+                Text("Payment method", style = MaterialTheme.typography.labelLarge)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf("Cash", "GCash", "Maya", "Card").forEach { type ->
+                        androidx.compose.material3.FilterChip(
+                            selected = paymentType == type,
+                            onClick = { paymentType = type },
+                            label = { Text(type) }
+                        )
+                    }
+                }
+                if (paymentType != "Cash") {
+                    OutlinedTextField(
+                        value = reference,
+                        onValueChange = { reference = it },
+                        label = { Text("Reference (optional)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (parsed != null && parsed > outstandingCents) {
+                    Text("Payment cannot exceed the outstanding balance.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onSave(parsed ?: 0L, paymentType, reference.ifBlank { null }) },
+                enabled = valid
+            ) { Text("Record payment") }
+        },
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
