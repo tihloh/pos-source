@@ -54,7 +54,7 @@ interface InventoryDao {
 
 @Dao
 interface SalesDao {
-    @Query("SELECT * FROM SaleEntity ORDER BY createdAt DESC")
+    @Query("SELECT * FROM SaleEntity WHERE status != 'DELETED' ORDER BY createdAt DESC")
     fun observeLatest(): Flow<List<SaleEntity>>
 
     @Query("SELECT * FROM SaleEntity WHERE id = :saleId LIMIT 1")
@@ -75,8 +75,14 @@ interface SalesDao {
     @Insert
     suspend fun addPayments(payments: List<PaymentEntity>)
 
-    @Query("SELECT * FROM SaleEntity WHERE createdAt BETWEEN :from AND :to ORDER BY createdAt DESC")
+    @Query("SELECT * FROM SaleEntity WHERE status != 'DELETED' AND createdAt BETWEEN :from AND :to ORDER BY createdAt DESC")
     suspend fun getRange(from: Long, to: Long): List<SaleEntity>
+
+    @Query("UPDATE SaleEntity SET amountPaidCents = :amountPaidCents, status = :status WHERE id = :saleId")
+    suspend fun updatePaymentState(saleId: Long, amountPaidCents: Long, status: String)
+
+    @Query("UPDATE SaleEntity SET status = 'DELETED' WHERE id = :saleId")
+    suspend fun markDeleted(saleId: Long)
 }
 
 @Dao
@@ -141,4 +147,32 @@ interface ProductSupplierDao {
 
     @Query("SELECT * FROM ProductSupplierCrossRef")
     suspend fun all(): List<ProductSupplierCrossRef>
+}
+
+
+@Dao
+interface CustomerPaymentDao {
+    @Query("SELECT * FROM CustomerPaymentEntity ORDER BY createdAt DESC")
+    fun observeAll(): Flow<List<CustomerPaymentEntity>>
+
+    @Query("SELECT * FROM CustomerPaymentEntity WHERE customerId = :customerId ORDER BY createdAt DESC")
+    suspend fun forCustomer(customerId: Long): List<CustomerPaymentEntity>
+
+    @Query("SELECT * FROM CustomerPaymentAllocationEntity WHERE paymentId = :paymentId ORDER BY saleId")
+    suspend fun allocations(paymentId: Long): List<CustomerPaymentAllocationEntity>
+
+    @Insert
+    suspend fun insert(payment: CustomerPaymentEntity): Long
+
+    @Insert
+    suspend fun insertAllocations(allocations: List<CustomerPaymentAllocationEntity>)
+}
+
+@Dao
+interface AuditLogDao {
+    @Query("SELECT * FROM AuditLogEntity ORDER BY createdAt DESC LIMIT 500")
+    fun observeLatest(): Flow<List<AuditLogEntity>>
+
+    @Insert
+    suspend fun insert(log: AuditLogEntity): Long
 }
