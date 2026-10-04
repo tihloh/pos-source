@@ -51,12 +51,14 @@ import com.tihloh.pos.data.AppDatabase
 import com.tihloh.pos.data.CustomerEntity
 import com.tihloh.pos.data.PosRepository
 import com.tihloh.pos.data.ProductEntity
-import com.tihloh.pos.scanner.BarcodeScannerView
+import com.tihloh.pos.scanner.BarcodeScannerDialog
 import com.tihloh.pos.security.PinStore
 import com.tihloh.pos.ui.screens.CartLine
 import com.tihloh.pos.ui.screens.CustomersScreen
 import com.tihloh.pos.ui.screens.InventoryScreen
 import com.tihloh.pos.ui.screens.MoreScreen
+import com.tihloh.pos.ui.screens.SettingsScreen
+import com.tihloh.pos.ui.screens.SuppliersScreen
 import com.tihloh.pos.ui.screens.PosScreen
 import com.tihloh.pos.ui.screens.ProductsScreen
 import com.tihloh.pos.ui.screens.SalesScreen
@@ -74,6 +76,8 @@ private enum class MainScreen(val title: String, val icon: ImageVector) {
     INVENTORY("Inventory", Icons.Default.Inventory2),
     PRODUCTS("Products", Icons.Default.Storefront),
     CUSTOMERS("Customers", Icons.Default.People),
+    SUPPLIERS("Suppliers", Icons.Default.Storefront),
+    SETTINGS("Settings", Icons.Default.MoreHoriz),
     MORE("More", Icons.Default.MoreHoriz)
 }
 
@@ -414,7 +418,11 @@ private fun MainShell(
         Scaffold(
         bottomBar = {
             NavigationBar {
-                MainScreen.entries.filter { it != MainScreen.CUSTOMERS }.forEach { item ->
+                MainScreen.entries.filter {
+                    it != MainScreen.CUSTOMERS &&
+                        it != MainScreen.SUPPLIERS &&
+                        it != MainScreen.SETTINGS
+                }.forEach { item ->
                     NavigationBarItem(
                         selected = screen == item,
                         onClick = { screen = item },
@@ -465,23 +473,33 @@ private fun MainShell(
                     onPhilSysScanRequest = { scannerMode = ScannerMode.PHILSYS_CUSTOMER },
                     onBack = { screen = MainScreen.MORE }
                 )
-                MainScreen.MORE -> MoreScreen(
+                MainScreen.SUPPLIERS -> SuppliersScreen(
+                    repository = repository,
+                    onBack = { screen = MainScreen.MORE }
+                )
+                MainScreen.SETTINGS -> SettingsScreen(
                     repository = repository,
                     checkUpdate = {
                         updateInfo = checker.check(force = true)
                     },
-                    onCustomers = { screen = MainScreen.CUSTOMERS },
                     themeMode = themeMode,
-                    onThemeModeChange = onThemeModeChange
+                    onThemeModeChange = onThemeModeChange,
+                    onBack = { screen = MainScreen.MORE }
+                )
+                MainScreen.MORE -> MoreScreen(
+                    repository = repository,
+                    onCustomers = { screen = MainScreen.CUSTOMERS },
+                    onSuppliers = { screen = MainScreen.SUPPLIERS },
+                    onSettings = { screen = MainScreen.SETTINGS }
                 )
             }
         }
         }
 
         scannerMode?.let { activeMode ->
-            BarcodeScannerView(
+            BarcodeScannerDialog(
                 onScanned = { code -> handleBarcode(activeMode, code) },
-                onBack = { scannerMode = null }
+                onDismiss = { scannerMode = null }
             )
         }
     }
