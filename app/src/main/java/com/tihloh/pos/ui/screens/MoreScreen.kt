@@ -19,13 +19,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -55,8 +57,8 @@ import com.tihloh.pos.data.PosRepository
 import com.tihloh.pos.data.SupplierEntity
 import com.tihloh.pos.printer.BluetoothEscPosPrinter
 import com.tihloh.pos.printer.BluetoothPrinterSupport
-import com.tihloh.pos.printer.PairedPrinter
 import com.tihloh.pos.printer.DEFAULT_RECEIPT_TEMPLATE
+import com.tihloh.pos.printer.PairedPrinter
 import com.tihloh.pos.printer.PrinterConfig
 import com.tihloh.pos.printer.PrinterSettings
 import com.tihloh.pos.printer.ReceiptData
@@ -66,221 +68,62 @@ import com.tihloh.pos.sync.CentralSyncClient
 import com.tihloh.pos.sync.SyncConfig
 import com.tihloh.pos.sync.SyncSettings
 import com.tihloh.pos.ui.theme.ThemeMode
-import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
+import kotlinx.coroutines.launch
 
 @Composable
 fun MoreScreen(
     repository: PosRepository,
-    checkUpdate: suspend () -> Unit,
     onCustomers: () -> Unit,
-    themeMode: ThemeMode,
-    onThemeModeChange: (ThemeMode) -> Unit
+    onSuppliers: () -> Unit,
+    onSettings: () -> Unit
 ) {
-    val suppliers by repository.suppliers.collectAsState(initial = emptyList())
     val auditLogs by repository.auditLogs.collectAsState(initial = emptyList())
-    val scope = rememberCoroutineScope()
-    val context = LocalContext.current
-    var editing by remember { mutableStateOf<SupplierEntity?>(null) }
-    var adding by remember { mutableStateOf(false) }
-    var checking by remember { mutableStateOf(false) }
-    var message by remember { mutableStateOf<String?>(null) }
-    var printerDialog by remember { mutableStateOf(false) }
-    var syncDialog by remember { mutableStateOf(false) }
-    var aboutDialog by remember { mutableStateOf(false) }
     var auditDialog by remember { mutableStateOf(false) }
-    var syncing by remember { mutableStateOf(false) }
-    var pairedDevices by remember { mutableStateOf<List<PairedPrinter>>(emptyList()) }
-
-    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-            pairedDevices = BluetoothPrinterSupport.pairedDevices(context)
-        }
-    }
-
-    fun refreshBluetoothDevices() {
-        if (BluetoothPrinterSupport.hasPermission(context)) {
-            pairedDevices = BluetoothPrinterSupport.pairedDevices(context)
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
-        }
-    }
+    var aboutDialog by remember { mutableStateOf(false) }
 
     Column(
         Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Text("More", style = MaterialTheme.typography.headlineMedium)
+        Text(
+            "Manage people, suppliers, settings, and system activity.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
 
-        Card(Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.DarkMode, contentDescription = null)
-                    Text(
-                        "Appearance",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ThemeMode.entries.forEach { mode ->
-                        FilterChip(
-                            selected = themeMode == mode,
-                            onClick = { onThemeModeChange(mode) },
-                            label = {
-                                Text(
-                                    when (mode) {
-                                        ThemeMode.SYSTEM -> "System"
-                                        ThemeMode.LIGHT -> "Light"
-                                        ThemeMode.DARK -> "Dark"
-                                    }
-                                )
-                            }
-                        )
-                    }
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Card(
-                modifier = Modifier.weight(1f).clickable {
-                    refreshBluetoothDevices()
-                    printerDialog = true
-                }
-            ) {
-                Column(Modifier.padding(14.dp)) {
-                    Icon(Icons.Default.Print, contentDescription = null)
-                    Text("Receipt printer", style = MaterialTheme.typography.titleSmall)
-                    Text("Bluetooth or network ESC/POS", style = MaterialTheme.typography.bodySmall)
-                }
-            }
-            Card(
-                modifier = Modifier.weight(1f).clickable { syncDialog = true }
-            ) {
-                Column(Modifier.padding(14.dp)) {
-                    Icon(Icons.Default.CloudSync, contentDescription = null)
-                    Text("Central sync", style = MaterialTheme.typography.titleSmall)
-                    Text("Local-first + online server", style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        }
-
-        Card(
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onCustomers)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(Icons.Default.People, contentDescription = null)
-                Column(Modifier.weight(1f)) {
-                    Text("Customers", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "Accounts, barcode lookup, and account balances",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        }
-
-        Card(
-            modifier = Modifier.fillMaxWidth().clickable { auditDialog = true }
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(Icons.Default.History, contentDescription = null)
-                Column(Modifier.weight(1f)) {
-                    Text("Audit log", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "Protected sales deletions and account payment activity",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        }
-
-        Card(
-            modifier = Modifier.fillMaxWidth().clickable { aboutDialog = true }
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(Icons.Default.Info, contentDescription = null)
-                Column(Modifier.weight(1f)) {
-                    Text("About", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "App info, version, and developer",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        }
-
-        Button(
-            onClick = { checking = true },
-            enabled = !checking,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(if (checking) "Checking for update…" else "Check for app update")
-        }
-
-        message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text("Suppliers", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            Button(onClick = { adding = true }) {
-                Icon(Icons.Default.Add, contentDescription = null)
-                Text("Add")
-            }
-        }
-
-        if (suppliers.isEmpty()) {
-            Text("No suppliers yet.")
-        } else {
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(suppliers, key = { it.id }) { supplier ->
-                    Card(Modifier.fillMaxWidth().clickable { editing = supplier }) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(supplier.name, style = MaterialTheme.typography.titleMedium)
-                                supplier.contactPerson?.let { Text(it) }
-                                supplier.phone?.let { Text(it) }
-                            }
-                            IconButton(onClick = { editing = supplier }) {
-                                Icon(Icons.Default.Edit, contentDescription = "Edit supplier")
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        MenuCard(
+            title = "Customers",
+            description = "Accounts, balances, barcode lookup, and payments",
+            icon = { Icon(Icons.Default.People, contentDescription = null) },
+            onClick = onCustomers
+        )
+        MenuCard(
+            title = "Suppliers",
+            description = "Supplier directory and contact information",
+            icon = { Icon(Icons.Default.Business, contentDescription = null) },
+            onClick = onSuppliers
+        )
+        MenuCard(
+            title = "Settings",
+            description = "Appearance, receipt printer, sync, and app updates",
+            icon = { Icon(Icons.Default.Settings, contentDescription = null) },
+            onClick = onSettings
+        )
+        MenuCard(
+            title = "Audit log",
+            description = "Protected deletions and customer account payments",
+            icon = { Icon(Icons.Default.History, contentDescription = null) },
+            onClick = { auditDialog = true }
+        )
+        MenuCard(
+            title = "About",
+            description = "App version and developer information",
+            icon = { Icon(Icons.Default.Info, contentDescription = null) },
+            onClick = { aboutDialog = true }
+        )
     }
 
     if (auditDialog) {
@@ -312,7 +155,7 @@ fun MoreScreen(
                                             )
                                         }
                                     }
-                                    Text(log.summary, style = MaterialTheme.typography.bodyMedium)
+                                    Text(log.summary)
                                     log.metadata?.let {
                                         Text(
                                             it,
@@ -345,47 +188,265 @@ fun MoreScreen(
             onDismissRequest = { aboutDialog = false },
             title = { Text("About POS") },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("POS", style = MaterialTheme.typography.headlineSmall)
-                    Text(
-                        "Point of Sale System",
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Point of Sale System", style = MaterialTheme.typography.titleMedium)
                     Text(
                         "Version ${BuildConfig.VERSION_NAME}",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-
                     Card(Modifier.fillMaxWidth()) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
+                        Column(Modifier.fillMaxWidth().padding(12.dp)) {
                             Text("Developer", style = MaterialTheme.typography.labelLarge)
-                            Text(
-                                "Christian Borsal Bustamante",
-                                style = MaterialTheme.typography.titleMedium
-                            )
+                            Text("Christian Borsal Bustamante", style = MaterialTheme.typography.titleMedium)
                             Text("Full Stack Software Developer")
-                            Text("IT Professional | Systems & Automation")
-                            Text(
-                                "GitHub: tihloh",
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                            Text("GitHub: tihloh", color = MaterialTheme.colorScheme.primary)
                         }
                     }
-
-                    Text(
-                        "Local-first Android POS with inventory, barcode scanning, " +
-                            "receipt printing, suppliers, sales tracking, and central sync.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
                 }
             },
             confirmButton = {
                 Button(onClick = { aboutDialog = false }) { Text("Close") }
             }
         )
+    }
+}
+
+@Composable
+fun SuppliersScreen(
+    repository: PosRepository,
+    onBack: () -> Unit
+) {
+    val suppliers by repository.suppliers.collectAsState(initial = emptyList())
+    val scope = rememberCoroutineScope()
+    var editing by remember { mutableStateOf<SupplierEntity?>(null) }
+    var adding by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    var message by remember { mutableStateOf<String?>(null) }
+
+    val filtered = remember(suppliers, query) {
+        suppliers.filter {
+            query.isBlank() ||
+                it.name.contains(query, true) ||
+                it.contactPerson.orEmpty().contains(query, true) ||
+                it.phone.orEmpty().contains(query, true) ||
+                it.email.orEmpty().contains(query, true)
+        }
+    }
+
+    Column(
+        Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedButton(onClick = onBack) { Text("Back") }
+            Text(
+                "Suppliers",
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.weight(1f).padding(start = 12.dp)
+            )
+            Button(onClick = { adding = true }) {
+                Icon(Icons.Default.Add, contentDescription = null)
+                Text("Add")
+            }
+        }
+
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            label = { Text("Search supplier / contact") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+
+        if (filtered.isEmpty()) {
+            Text("No matching suppliers.")
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(filtered, key = { it.id }) { supplier ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth().clickable { editing = supplier }
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(Icons.Default.Business, contentDescription = null)
+                            Column(Modifier.weight(1f)) {
+                                Text(supplier.name, style = MaterialTheme.typography.titleMedium)
+                                val detail = listOfNotNull(
+                                    supplier.contactPerson,
+                                    supplier.phone,
+                                    supplier.email
+                                ).filter { it.isNotBlank() }.joinToString(" · ")
+                                if (detail.isNotBlank()) {
+                                    Text(
+                                        detail,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            IconButton(onClick = { editing = supplier }) {
+                                Icon(Icons.Default.Edit, contentDescription = "Edit supplier")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (adding) {
+        SupplierDialog(
+            initial = SupplierEntity(name = ""),
+            onDismiss = { adding = false },
+            onSave = { supplier ->
+                scope.launch {
+                    runCatching { repository.saveSupplier(supplier) }
+                        .onSuccess {
+                            adding = false
+                            message = "Supplier saved."
+                        }
+                        .onFailure { message = it.message ?: "Unable to save supplier." }
+                }
+            }
+        )
+    }
+
+    editing?.let { supplier ->
+        SupplierDialog(
+            initial = supplier,
+            onDismiss = { editing = null },
+            onSave = { updated ->
+                scope.launch {
+                    runCatching { repository.saveSupplier(updated) }
+                        .onSuccess {
+                            editing = null
+                            message = "Supplier updated."
+                        }
+                        .onFailure { message = it.message ?: "Unable to update supplier." }
+                }
+            }
+        )
+    }
+}
+
+@Composable
+fun SettingsScreen(
+    repository: PosRepository,
+    checkUpdate: suspend () -> Unit,
+    themeMode: ThemeMode,
+    onThemeModeChange: (ThemeMode) -> Unit,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var printerDialog by remember { mutableStateOf(false) }
+    var syncDialog by remember { mutableStateOf(false) }
+    var checking by remember { mutableStateOf(false) }
+    var syncing by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    var pairedDevices by remember { mutableStateOf<List<PairedPrinter>>(emptyList()) }
+
+    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            pairedDevices = BluetoothPrinterSupport.pairedDevices(context)
+        }
+    }
+
+    fun refreshBluetoothDevices() {
+        if (BluetoothPrinterSupport.hasPermission(context)) {
+            pairedDevices = BluetoothPrinterSupport.pairedDevices(context)
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+        }
+    }
+
+    Column(
+        Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedButton(onClick = onBack) { Text("Back") }
+            Text(
+                "Settings",
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.weight(1f).padding(start = 12.dp)
+            )
+        }
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.DarkMode, contentDescription = null)
+                    Text(
+                        "Appearance",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ThemeMode.entries.forEach { mode ->
+                        FilterChip(
+                            selected = themeMode == mode,
+                            onClick = { onThemeModeChange(mode) },
+                            label = {
+                                Text(
+                                    when (mode) {
+                                        ThemeMode.SYSTEM -> "System"
+                                        ThemeMode.LIGHT -> "Light"
+                                        ThemeMode.DARK -> "Dark"
+                                    }
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        MenuCard(
+            title = "Receipt printer",
+            description = "Bluetooth or network ESC/POS printer",
+            icon = { Icon(Icons.Default.Print, contentDescription = null) },
+            onClick = {
+                refreshBluetoothDevices()
+                printerDialog = true
+            }
+        )
+        MenuCard(
+            title = "Central sync",
+            description = "Configure the optional online synchronization server",
+            icon = { Icon(Icons.Default.CloudSync, contentDescription = null) },
+            onClick = { syncDialog = true }
+        )
+
+        Button(
+            onClick = { checking = true },
+            enabled = !checking,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(if (checking) "Checking for update…" else "Check for app update")
+        }
+
+        message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
     }
 
     if (checking) {
@@ -451,6 +512,7 @@ fun MoreScreen(
             onDismiss = { if (!syncing) syncDialog = false },
             onSave = {
                 SyncSettings(context).save(it)
+                syncDialog = false
                 message = "Central sync settings saved."
             },
             onSync = { cfg ->
@@ -470,33 +532,31 @@ fun MoreScreen(
             }
         )
     }
+}
 
-    if (adding) {
-        SupplierDialog(
-            initial = SupplierEntity(name = ""),
-            onDismiss = { adding = false },
-            onSave = { supplier ->
-                scope.launch {
-                    runCatching { repository.saveSupplier(supplier) }
-                        .onSuccess { adding = false }
-                        .onFailure { message = it.message }
-                }
+@Composable
+private fun MenuCard(
+    title: String,
+    description: String,
+    icon: @Composable () -> Unit,
+    onClick: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            icon()
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-        )
-    }
-
-    editing?.let { supplier ->
-        SupplierDialog(
-            initial = supplier,
-            onDismiss = { editing = null },
-            onSave = { updated ->
-                scope.launch {
-                    runCatching { repository.saveSupplier(updated) }
-                        .onSuccess { editing = null }
-                        .onFailure { message = it.message }
-                }
-            }
-        )
+        }
     }
 }
 
@@ -566,27 +626,17 @@ private fun PrinterDialog(
                     }
                 }
                 if (connectionType == "BLUETOOTH") {
-                    item {
-                        Text(
-                            "Paired printers",
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                    }
                     if (pairedDevices.isEmpty()) {
                         item {
                             Text(
-                                "No paired Bluetooth devices found. Pair the printer in Android first, then refresh.",
+                                "No paired devices found. Pair the printer in Android first.",
                                 style = MaterialTheme.typography.bodySmall
                             )
                         }
                         item {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(onClick = onOpenBluetoothSettings) {
-                                    Text("Pair device")
-                                }
-                                OutlinedButton(onClick = onRefreshBluetooth) {
-                                    Text("Refresh")
-                                }
+                                OutlinedButton(onClick = onOpenBluetoothSettings) { Text("Pair device") }
+                                OutlinedButton(onClick = onRefreshBluetooth) { Text("Refresh") }
                             }
                         }
                     } else {
@@ -633,9 +683,6 @@ private fun PrinterDialog(
                     }
                 }
                 item {
-                    Text("Receipt", style = MaterialTheme.typography.titleMedium)
-                }
-                item {
                     OutlinedTextField(
                         value = storeName,
                         onValueChange = { storeName = it },
@@ -649,16 +696,15 @@ private fun PrinterDialog(
                         value = receiptTemplate,
                         onValueChange = { receiptTemplate = it },
                         label = { Text("Receipt template") },
-                        minLines = 10,
+                        minLines = 9,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
                 item {
                     Text(
                         "Placeholders: {store}, {receipt}, {date}, {time}, {datetime}, " +
-                            "{customer}, {items}, {item_count}, " +
-                            "{subtotal}, {discount}, {total}, " +
-                            "{payment}, {paid}, {balance}, {change}",
+                            "{customer}, {items}, {item_count}, {subtotal}, {discount}, " +
+                            "{total}, {payment}, {paid}, {balance}, {change}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -671,7 +717,7 @@ private fun PrinterDialog(
                         OutlinedButton(
                             onClick = { receiptTemplate = DEFAULT_RECEIPT_TEMPLATE },
                             modifier = Modifier.weight(1f)
-                        ) { Text("Reset template") }
+                        ) { Text("Reset") }
                         OutlinedButton(
                             onClick = { onTest(cfg) },
                             enabled = when (connectionType) {
@@ -801,9 +847,7 @@ private fun SupplierDialog(
                 enabled = name.isNotBlank()
             ) { Text("Save") }
         },
-        dismissButton = {
-            OutlinedButton(onClick = onDismiss) { Text("Cancel") }
-        }
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
