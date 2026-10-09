@@ -13,6 +13,7 @@ import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -174,7 +175,8 @@ fun BarcodeScannerView(onScanned: (String) -> Unit, onBack: () -> Unit) {
 
         Box(
             modifier = Modifier
-                .size(width = 310.dp, height = 190.dp)
+                .fillMaxWidth(0.78f)
+                .aspectRatio(1f)
                 .align(Alignment.Center)
                 .border(
                     width = 3.dp,
