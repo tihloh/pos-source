@@ -3,6 +3,8 @@ package com.tihloh.pos.ui
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +23,7 @@ import androidx.compose.material.icons.filled.People
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -42,6 +45,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
@@ -128,8 +132,14 @@ private fun SetupPinScreen(onSaved: (String) -> Unit) {
     var confirm by rememberSaveable { mutableStateOf("") }
     val valid = pin.length in 4..8 && pin.all(Char::isDigit) && pin == confirm
 
-    CenteredPanel(title = "Secure your POS") {
-        Text("Create a 4–8 digit PIN. Biometrics can also unlock the app afterward.")
+    CenteredPanel(
+        title = "Secure your POS",
+        subtitle = "Protect sales, inventory, and customer data"
+    ) {
+        Text(
+            "Create a 4–8 digit PIN. Biometrics can also unlock the app afterward.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         Spacer(Modifier.height(16.dp))
         PinField("PIN", pin) { pin = it.take(8).filter(Char::isDigit) }
         PinField("Confirm PIN", confirm) { confirm = it.take(8).filter(Char::isDigit) }
@@ -150,7 +160,10 @@ private fun LockScreen(
     var pin by rememberSaveable { mutableStateOf("") }
     var error by rememberSaveable { mutableStateOf(false) }
 
-    CenteredPanel(title = "POS Locked") {
+    CenteredPanel(
+        title = "Welcome back",
+        subtitle = "Unlock your workspace securely"
+    ) {
         PinField("PIN", pin) {
             pin = it.take(8).filter(Char::isDigit)
             error = false
@@ -186,13 +199,102 @@ private fun PinField(label: String, value: String, onChange: (String) -> Unit) {
 }
 
 @Composable
-private fun CenteredPanel(title: String, content: @Composable () -> Unit) {
-    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(24.dp)) {
-                Text(title, style = MaterialTheme.typography.headlineSmall)
-                Spacer(Modifier.height(16.dp))
-                content()
+private fun CenteredPanel(
+    title: String,
+    subtitle: String,
+    content: @Composable () -> Unit
+) {
+    val colors = MaterialTheme.colorScheme
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        colors.primary.copy(alpha = 0.18f),
+                        colors.background,
+                        colors.tertiary.copy(alpha = 0.10f)
+                    )
+                )
+            )
+            .padding(24.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(220.dp)
+                .align(Alignment.TopEnd)
+                .background(colors.primary.copy(alpha = 0.10f), CircleShape)
+        )
+        Box(
+            modifier = Modifier
+                .size(170.dp)
+                .align(Alignment.BottomStart)
+                .background(colors.secondary.copy(alpha = 0.10f), CircleShape)
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.Center),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .background(
+                        Brush.linearGradient(
+                            listOf(colors.primary, colors.secondary)
+                        ),
+                        RoundedCornerShape(24.dp)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PointOfSale,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(38.dp)
+                )
+            }
+
+            Spacer(Modifier.height(18.dp))
+            Text(
+                "Tihloh POS",
+                style = MaterialTheme.typography.titleMedium,
+                color = colors.primary
+            )
+            Text(
+                "Fast · secure · ready for business",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant
+            )
+            Spacer(Modifier.height(24.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = colors.surface.copy(alpha = 0.96f)
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
+                border = BorderStroke(1.dp, colors.outline.copy(alpha = 0.24f)),
+                shape = RoundedCornerShape(28.dp)
+            ) {
+                Column(Modifier.padding(24.dp)) {
+                    Text(
+                        title,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = colors.onSurface
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(20.dp))
+                    content()
+                }
             }
         }
     }
