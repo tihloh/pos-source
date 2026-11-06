@@ -11,6 +11,13 @@ class PinStore(context: Context) {
 
     fun hasPin(): Boolean = prefs.contains(KEY_HASH) && prefs.contains(KEY_SALT)
 
+    // Android keeps all biometric templates; POS only remembers the user's opt-in.
+    fun isFaceUnlockEnabled(): Boolean = prefs.getBoolean(KEY_FACE_UNLOCK_ENABLED, false)
+
+    fun setFaceUnlockEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_FACE_UNLOCK_ENABLED, enabled).apply()
+    }
+
     fun savePin(pin: String) {
         require(pin.length in 4..8 && pin.all(Char::isDigit))
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
@@ -49,5 +56,6 @@ class PinStore(context: Context) {
     companion object {
         private const val KEY_SALT = "pin_salt"
         private const val KEY_HASH = "pin_hash"
+        private const val KEY_FACE_UNLOCK_ENABLED = "face_unlock_enabled"
     }
 }
