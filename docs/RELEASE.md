@@ -1,113 +1,122 @@
-# POS Android signed releases and in-app updates
+# POS Android: Signed releases and automatic updates
 
-## How releases work
+## Release architecture
 
-The Android app source and release workflow live in `tihloh/pos-source`.
-Signed, public APK releases are published into **a different repository**,
-`tihloh/pos`, so the installed application's update checker can find them.
+The POS uses two public GitHub repositories:
 
-1. Change `.release-version` on `pos-source/main` with a newer
-   `VERSION_NAME` and strictly increasing `VERSION_CODE`. This triggers
-   `Actions → Release APK`. You can also use **Run workflow** with matching
-   version name/code without changing the tracked file.
-2. GitHub Actions restores the existing Android signing key, compiles the
-   release APK, and stores `POS-v<version>-signed-apk` as a workflow artifact.
-   This artifact is retained for 30 days (subject to repository policy).
-3. It authenticates to `tihloh/pos` using the GitHub Actions secret
-   `POS_RELEASE_TOKEN`, then creates a public, non-prerelease GitHub Release
-   containing `POS-v<version>.apk`.
-4. The workflow verifies that the new release includes the APK and that the
-   `/releases/latest` endpoint reports its tag. **A successful APK build
-   is not proof that the release was published.**
+- **`tihloh/pos-source`** — Kotlin/Android source, release signing, and source release assets.
+- **`tihloh/pos`** — the public release channel used by installed POS apps.
 
-### Android signing (one-time setup)
+Each repository publishes with **its own GitHub Actions `GITHUB_TOKEN`**.
+There is **no cross-repository personal access token requirement**.
 
-Installable app updates must be signed using **the same key** as the currently
-installed app. Never regenerate the key to fix publishing authentication.
+### 1. Build and publish a signed source release
 
-The `pos-source` Actions secrets are:
+On `tihloh/pos-source/main`, update `.release-version` with a higher
+`VERSION_NAME` and an increasing Android `VERSION_CODE`. This runs
+`Actions → Release APK`. Changes to `.github/workflows/release.yml` also
+trigger the workflow; you can manually use **Run workflow** for a release
+using explicit version inputs.
 
-- `ANDROID_KEYSTORE_BASE64`: Base64-encoded Android signing keystore.
+The release workflow:
+
+1. Reads the intended version and restores the **existing** signing keystore.
+2. Compiles the signed `POS-v<version>.apk` (package `com.tihloh.pos`).
+3. Computes the file's `POS-v<version>.apk.sha256` checksum.
+4. Retains both files in an Actions artifact named
+   `POS-v<version>-signed-apk` (30 days, subject to repository limits).
+5. Publishes both files as a **release in `tihloh/pos-source`** using its
+   own short-lived workflow token.
+6. Verifies the source release contains the signed APK and checksum.
+
+For a stable public update, leave `prerelease` disabled. The public mirror
+reads only the source repository's `/releases/latest` stable release.
+
+### 2. Mirror the signed APK to the public POS release channel
+
+The workflow
+[`tihloh/pos/.github/workflows/mirror-release.yml`](https://github.com/tihloh/pos/blob/main/.github/workflows/mirror-release.yml)
+runs when manually dispatched and twice per hour, at minutes 07 and 37 UTC.
+It also runs when the mirror workflow itself changes on `main`.
+
+It reads the latest published stable source release, checks that its APK and
+SHA-256 checksum assets exist, downloads them, and verifies the checksum.
+Then it uses the **`pos` repository's own `GITHUB_TOKEN`** to publish the
+same signed APK as a `tihloh/pos` GitHub Release.
+
+The mirror is idempotent, skips downgrades, and verifies that the Android
+update endpoint `https://api.github.com/repos/tihloh/pos/releases/latest`
+returns the mirrored tag and an APK asset.
+
+**Do not add the old `POS_RELEASE_TOKEN` back to the workflow** merely to
+restore cross-repository publishing. This architecture no longer uses it.
+The unused secret may be retired through repository Settings.
+
+### 3. Verify that users can detect the update
+
+After the mirror workflow succeeds:
+
+- Check [public POS Releases](https://github.com/tihloh/pos/releases).
+- Check `https://api.github.com/repos/tihloh/pos/releases/latest`.
+  Its `tag_name` must equal the new version, e.g. `v0.5.9`.
+- Confirm the release is published, **not a draft or prerelease**, and
+  includes `POS-v<version>.apk`.
+- Test an installed earlier version via **POS → Settings → Check for app update**.
+  The app can show an Android installer confirmation.
+
+The current installed app uses `UpdateChecker.kt` to compare the public
+`/releases/latest` tag with its installed `BuildConfig.VERSION_NAME`.
+It checks on startup and periodically using WorkManager subject to network
+and Android scheduling; forced checks bypass the 12-hour local cache.
+A source commit or successful Gradle build **alone** does not create a
+detectable app update.
+
+## Signing credentials (source repository only)
+
+Keep the following `pos-source → Settings → Secrets and variables → Actions`
+secrets securely configured:
+
+- `ANDROID_KEYSTORE_BASE64`: Existing release keystore, Base64 encoded.
 - `ANDROID_KEYSTORE_PASSWORD`
 - `ANDROID_KEY_ALIAS`
 - `ANDROID_KEY_PASSWORD`
-- `POS_RELEASE_TOKEN`: an independent GitHub token that **can publish
-  releases in `tihloh/pos`**.
 
-Do not paste any of these secret values into code, AI memory, issues, or
-GitHub workflow logs.
+**Never replace the Android signing key to repair a GitHub publication error.**
+Android updates require the same package name and signing identity, plus
+a higher version code. Do not uninstall POS to fix an update: local inventory,
+customer and sales data may be removed along with the app.
 
-### Creating or renewing POS_RELEASE_TOKEN
+## Troubleshooting
 
-The workflow's built-in `GITHUB_TOKEN` is scoped to `pos-source` and
-cannot automatically create releases in the separate `tihloh/pos` repo.
-
-1. In GitHub **Settings → Developer settings → Personal access tokens →
-   Fine-grained tokens**, create a token owned by `tihloh`.
-2. Grant repository access specifically to `tihloh/pos` with
-   **Contents: Read and write**. Approve organization policies if applicable.
-   Set an expiration and track the renewal date securely.
-3. In `tihloh/pos-source → Settings → Secrets and variables → Actions`,
-   **replace** `POS_RELEASE_TOKEN` with this token.
-4. Run `Release APK` again. Never commit the token to the repository.
-
-When a token is expired, revoked, or missing permissions, GitHub may return
-HTTP 401/403. The workflow now produces a clear authentication error while
-preserving the signed APK as an Actions artifact.
-
-### If release publication fails: manual recovery
-
-If the **signed build** and **Preserve signed APK** steps succeeded but
-**Verify release publishing credentials** or **Create GitHub Release** failed:
-
-1. Open the failed `Release APK` run under `pos-source → Actions`.
-2. Download its `POS-v<version>-signed-apk` artifact and extract the ZIP.
-3. In `tihloh/pos → Releases → Draft a new release`, create the tag
-   `v<version>`, attach the extracted **signed**
-   `POS-v<version>.apk`, do **not** select prerelease, then publish.
-4. Verify that `https://api.github.com/repos/tihloh/pos/releases/latest`
-   reports the new tag and includes an APK asset.
-5. Open the installed POS app and check for updates. The app must have an
-   older version; for example, `0.5.8` detects `v0.5.9`.
-
-This manual recovery is not a substitute for renewing the token. Fix
-`POS_RELEASE_TOKEN` so future updates publish automatically.
-
-## Android update discovery and installation
-
-The current app checks
-`https://api.github.com/repos/tihloh/pos/releases/latest`, which must
-return a **published non-prerelease** release. A source commit, Gradle build,
-workflow artifact, draft, or prerelease alone is **not detectable** as the
-latest stable app update.
-
-The app compares the GitHub release tag with the installed version name.
-When a newer version exists, it uses Android's PackageInstaller to stage
-the signed APK internally. The app checks on startup and can run periodic
-background checks subject to Android WorkManager scheduling and connectivity.
-A **forced check** bypasses its 12-hour local throttle; Android may still
-require confirmation for sideloaded APK installation.
-
-For successful in-place upgrades, the APK must have the same Android package
-ID (`com.tihloh.pos`), be signed by the existing key, and use a version code
-greater than the installed APK. Do not uninstall the app as an update fix:
-doing so can remove its local POS database.
-
-## Common symptoms
-
-| Symptom | What to check |
+| Symptom | Diagnosis / action |
 | --- | --- |
-| GitHub build succeeds but Android finds no update | Did the **Release APK** job complete successfully and publish to `tihloh/pos`? |
-| `Create GitHub Release` returns HTTP 401 | Renew `POS_RELEASE_TOKEN`; verify correct owner and repo permissions |
-| Signed APK exists in workflow artifacts but not Releases | Manually publish the artifact to `tihloh/pos`, then repair the token |
-| App says no update even when new release exists | Confirm installed version, stable `/releases/latest` tag, APK asset, network access, and GitHub API rate limits |
-| Android refuses to install new APK | Compare package ID, signing certificate, and monotonic version code |
+| Release APK fails during signing | Inspect `pos-source → Actions → Release APK` and verify the four signing secrets |
+| Signed source APK release exists but `pos` is still older | Run `pos → Actions → Mirror signed POS release → Run workflow` and inspect that job |
+| Public mirror fails with 403 permissions | Check `tihloh/pos` Actions workflow permissions; the mirror requires `contents: write` in its **own** repo |
+| Mirror fails on APK verification | Check source release assets and checksum; do not publish an unverified APK |
+| App fails to detect published update | Confirm `pos/releases/latest`, an attached APK asset, installed version name, and GitHub API connectivity |
+| Android refuses in-place installation | Check signing key, package ID, version code, and system install permission |
 
-### Release verification checklist
+### Emergency manual publication
 
-- `pos-source` code and intended `.release-version` are on `main`.
-- `Release APK` succeeded, **not only** `Build APK`.
-- Signed APK file is present in **public** `tihloh/pos` release assets.
-- `/releases/latest` returns the intended version tag.
-- Update is detected and installed over an existing POS installation
-  **without deleting local records**.
+If the source signed release exists but the public mirror is unavailable:
+
+1. Download **`POS-v<version>.apk`** from `tihloh/pos-source` Releases
+   (or the signed Actions artifact). Do **not** use a debug APK.
+2. In `tihloh/pos → Releases → Draft a new release`, use the same
+   `v<version>` tag, attach the signed APK, and publish a **stable** release.
+3. Confirm the `pos/releases/latest` endpoint exposes the tag and APK.
+4. Fix the mirror workflow for subsequent automatic releases.
+
+## History / recovery
+
+- **v0.5.8**, 2026-10-09: Published successfully using the former
+  cross-repository `POS_RELEASE_TOKEN` mechanism.
+- **v0.5.9**, 2026-11-06: The original signed build succeeded, but
+  cross-repository publication failed with **HTTP 401** at
+  `Create GitHub Release`. The new source-release + mirror process
+  then successfully published v0.5.9 to the public `pos` release channel.
+
+Never regard a successful compilation alone as a complete deployment.
+Verify both the **source release** and **public release** before telling
+users an Android update is available.
