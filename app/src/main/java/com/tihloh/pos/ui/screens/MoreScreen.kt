@@ -8,6 +8,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -51,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.tihloh.pos.BuildConfig
 import com.tihloh.pos.data.PosRepository
@@ -346,6 +349,10 @@ fun SettingsScreen(
     checkUpdate: suspend () -> Unit,
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit,
+    verifyPin: (String) -> Boolean,
+    faceBiometricAvailable: Boolean,
+    faceUnlockEnabled: Boolean,
+    onFaceUnlockEnabledChange: (Boolean) -> Unit,
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
@@ -355,6 +362,9 @@ fun SettingsScreen(
     var checking by remember { mutableStateOf(false) }
     var syncing by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var confirmFaceEnable by remember { mutableStateOf(false) }
+    var facePin by remember { mutableStateOf("") }
+    var facePinError by remember { mutableStateOf(false) }
     var pairedDevices by remember { mutableStateOf<List<PairedPrinter>>(emptyList()) }
 
     val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
@@ -422,6 +432,56 @@ fun SettingsScreen(
             }
         }
 
+        Card(Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Security, contentDescription = null)
+                    Text(
+                        "Security",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Face & fingerprint unlock")
+                        Text(
+                            "Allow Android face recognition or fingerprint to unlock POS.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = faceUnlockEnabled,
+                        onCheckedChange = { enabled ->
+                            if (enabled) {
+                                facePin = ""
+                                facePinError = false
+                                confirmFaceEnable = true
+                            } else {
+                                onFaceUnlockEnabledChange(false)
+                            }
+                        },
+                        enabled = faceBiometricAvailable || faceUnlockEnabled
+                    )
+                }
+                Text(
+                    if (faceBiometricAvailable) {
+                        "Android chooses an enrolled face or fingerprint. " +
+                            "Sensitive operations continue to require stronger authentication."
+                    } else {
+                        "No supported biometric is enrolled. " +
+                            "Set up face or fingerprint unlock in Android Settings first."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
         MenuCard(
             title = "Receipt printer",
             description = "Bluetooth or network ESC/POS printer",
@@ -455,6 +515,62 @@ fun SettingsScreen(
             message = "Update check completed."
             checking = false
         }
+    }
+
+    if (confirmFaceEnable) {
+        AlertDialog(
+            onDismissRequest = {
+                confirmFaceEnable = false
+                facePin = ""
+            },
+            title = { Text("Enable face & fingerprint unlock") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Confirm your POS PIN to allow Android's enrolled biometrics " +
+                            "to unlock the app. Some facial recognition methods are " +
+                            "less secure than strong biometrics."
+                    )
+                    OutlinedTextField(
+                        value = facePin,
+                        onValueChange = {
+                            facePin = it.filter(Char::isDigit).take(8)
+                            facePinError = false
+                        },
+                        label = { Text("POS PIN") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        visualTransformation = PasswordVisualTransformation(),
+                        isError = facePinError,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (facePinError) {
+                        Text("Incorrect PIN", color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (verifyPin(facePin)) {
+                            onFaceUnlockEnabledChange(true)
+                            confirmFaceEnable = false
+                            facePin = ""
+                            message = "Face & fingerprint unlock enabled."
+                        } else {
+                            facePinError = true
+                        }
+                    },
+                    enabled = facePin.length in 4..8
+                ) { Text("Enable") }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = {
+                    confirmFaceEnable = false
+                    facePin = ""
+                }) { Text("Cancel") }
+            }
+        )
     }
 
     if (printerDialog) {
