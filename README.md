@@ -5,7 +5,8 @@ Local-first Android POS and inventory app focused on fast scanner-driven retail 
 ## Current features
 
 - Kotlin + Jetpack Compose
-- PIN + biometric/device-credential lock
+- PIN + strong biometric/device-credential lock
+- Optional face-compatible biometric unlock (Android face or fingerprint, opt-in under Settings → Security; PIN confirmation required)
 - Camera barcode/QR scanning with CameraX + ML Kit
 - Open Food Facts + Open Products Facts lookup
 - Product catalog with one-to-many / many-to-many supplier links
@@ -81,6 +82,19 @@ When enabled, the app can POST a local snapshot to:
 The request currently includes products, suppliers, and sales. The endpoint may use bearer-token authentication.
 
 This provides the client-side foundation for a future multi-device central POS server while preserving offline operation.
+
+## Face-compatible biometric unlock
+
+In **Settings → Security**, enable **Face & fingerprint unlock** after confirming
+the existing POS PIN. Android must already have an enrolled compatible biometric.
+The POS lock screen then offers an additional button that accepts Android-managed
+face or fingerprint verification, including compatible Class 2 biometrics.
+
+This option cannot force face-only authentication: Android chooses the enrolled
+modality. POS neither captures nor stores face images or biometric templates.
+The original PIN and strong-biometric/device-credential paths remain available.
+Sensitive actions, including sale deletion, retain the original stronger
+authentication route.
 
 ## Updates
 
