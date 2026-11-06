@@ -20,10 +20,12 @@ class MainActivity : FragmentActivity() {
     private lateinit var pinStore: PinStore
     private lateinit var themeSettings: ThemeSettings
     private var themeMode by mutableStateOf(ThemeMode.SYSTEM)
+    private var faceUnlockEnabled by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         pinStore = PinStore(this)
+        faceUnlockEnabled = pinStore.isFaceUnlockEnabled()
         themeSettings = ThemeSettings(this)
         themeMode = themeSettings.load()
         UpdateScheduler.schedule(applicationContext)
@@ -33,7 +35,14 @@ class MainActivity : FragmentActivity() {
                 PosRoot(
                     pinStore = pinStore,
                     biometricAvailable = biometricAvailable(),
+                    faceBiometricAvailable = faceBiometricAvailable(),
+                    faceUnlockEnabled = faceUnlockEnabled,
                     requestBiometric = ::authenticateBiometric,
+                    requestFaceBiometric = ::authenticateFaceBiometric,
+                    onFaceUnlockEnabledChange = { enabled ->
+                        pinStore.setFaceUnlockEnabled(enabled)
+                        faceUnlockEnabled = enabled
+                    },
                     themeMode = themeMode,
                     onThemeModeChange = {
                         themeMode = it
@@ -49,6 +58,37 @@ class MainActivity : FragmentActivity() {
             BiometricManager.Authenticators.DEVICE_CREDENTIAL
         return BiometricManager.from(this).canAuthenticate(authenticators) ==
             BiometricManager.BIOMETRIC_SUCCESS
+    }
+
+    // Weak includes strong biometrics and allows compatible Android face unlock.
+    // Android selects the enrolled modality; apps cannot require face specifically.
+    private fun faceBiometricAvailable(): Boolean =
+        BiometricManager.from(this).canAuthenticate(
+            BiometricManager.Authenticators.BIOMETRIC_WEAK
+        ) == BiometricManager.BIOMETRIC_SUCCESS
+
+    private fun authenticateFaceBiometric(onSuccess: () -> Unit) {
+        if (!faceUnlockEnabled || !faceBiometricAvailable()) return
+
+        val prompt = BiometricPrompt(
+            this,
+            ContextCompat.getMainExecutor(this),
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    super.onAuthenticationSucceeded(result)
+                    onSuccess()
+                }
+            }
+        )
+
+        val info = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Unlock POS with face or fingerprint")
+            .setSubtitle("Use your enrolled Android biometric")
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK)
+            .setNegativeButtonText("Use POS PIN")
+            .build()
+
+        prompt.authenticate(info)
     }
 
     private fun authenticateBiometric(onSuccess: () -> Unit) {
