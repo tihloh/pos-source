@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.release-version'
+      - '.github/workflows/release.yml'
   workflow_dispatch:
     inputs:
       versionName:
@@ -25,8 +26,14 @@ on:
         required: false
         type: string
 
+# The source repository token cannot publish releases in the separate public
+# tihloh/pos repository. POS_RELEASE_TOKEN must have Contents: read/write there.
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: pos-signed-release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -121,6 +128,31 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk "$APK"
           echo "path=$APK" >> "$GITHUB_OUTPUT"
 
+      # Keep the signed APK even when GitHub rejects the cross-repository token.
+      # This also allows the owner to publish manually without rebuilding or
+      # changing the Android signing certificate.
+      - name: Preserve signed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: POS-v${{ steps.meta.outputs.version_name }}-signed-apk
+          path: ${{ steps.apk.outputs.path }}
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+      - name: Verify release publishing credentials
+        shell: bash
+        run: |
+          if ! gh api "repos/$RELEASE_REPO" >/dev/null 2>&1; then
+            echo "::error title=Invalid POS release token::POS_RELEASE_TOKEN cannot authenticate against $RELEASE_REPO (HTTP 401 or inaccessible repository). Renew the GitHub Actions secret in pos-source before publishing."
+            exit 1
+          fi
+
+          if [ "$(gh api "repos/$RELEASE_REPO" --jq '.permissions.push // false')" != "true" ]; then
+            echo "::error title=Missing release permission::POS_RELEASE_TOKEN needs Contents: read and write access to $RELEASE_REPO. The built signed APK is saved under this workflow run's Artifacts."
+            exit 1
+          fi
+
       - name: Create GitHub Release
         shell: bash
         run: |
@@ -144,3 +176,23 @@ jobs:
               --generate-notes \
               "${EXTRA[@]}"
           fi
+
+      - name: Verify published GitHub release
+        shell: bash
+        run: |
+          TAG="v${{ steps.meta.outputs.version_name }}"
+          APK="${{ steps.apk.outputs.path }}"
+          if ! gh release view "$TAG" --repo "$RELEASE_REPO" --json assets --jq '.assets[].name' | grep -Fxq "$APK"; then
+            echo "::error title=Release missing APK::The public $RELEASE_REPO release $TAG is missing $APK. Android cannot install an update without that asset."
+            exit 1
+          fi
+
+          if [ "${{ steps.meta.outputs.prerelease }}" = "false" ]; then
+            LATEST="$(gh api "repos/$RELEASE_REPO/releases/latest" --jq '.tag_name')"
+            if [ "$LATEST" != "$TAG" ]; then
+              echo "::error title=Release not latest::The update checker reads /releases/latest, which currently returned $LATEST instead of $TAG."
+              exit 1
+            fi
+          fi
+
+          echo "Published $TAG with signed APK $APK to $RELEASE_REPO"
