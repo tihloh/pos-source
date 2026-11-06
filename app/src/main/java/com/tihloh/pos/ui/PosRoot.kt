@@ -95,7 +95,11 @@ private enum class ScannerMode { POS, INVENTORY, PRODUCT, CUSTOMER, POS_CUSTOMER
 fun PosRoot(
     pinStore: PinStore,
     biometricAvailable: Boolean,
+    faceBiometricAvailable: Boolean,
+    faceUnlockEnabled: Boolean,
     requestBiometric: (() -> Unit) -> Unit,
+    requestFaceBiometric: (() -> Unit) -> Unit,
+    onFaceUnlockEnabledChange: (Boolean) -> Unit,
     themeMode: ThemeMode,
     onThemeModeChange: (ThemeMode) -> Unit
 ) {
@@ -114,8 +118,11 @@ fun PosRoot(
     if (!unlocked) {
         LockScreen(
             biometricAvailable = biometricAvailable,
+            faceBiometricAvailable = faceBiometricAvailable,
+            faceUnlockEnabled = faceUnlockEnabled,
             verifyPin = pinStore::verify,
             requestBiometric = { requestBiometric { unlocked = true } },
+            requestFaceBiometric = { requestFaceBiometric { unlocked = true } },
             onUnlocked = { unlocked = true }
         )
         return
@@ -126,7 +133,10 @@ fun PosRoot(
         onThemeModeChange = onThemeModeChange,
         verifyPin = pinStore::verify,
         biometricAvailable = biometricAvailable,
-        requestBiometric = requestBiometric
+        faceBiometricAvailable = faceBiometricAvailable,
+        faceUnlockEnabled = faceUnlockEnabled,
+        requestBiometric = requestBiometric,
+        onFaceUnlockEnabledChange = onFaceUnlockEnabledChange
     )
 }
 
@@ -157,8 +167,11 @@ private fun SetupPinScreen(onSaved: (String) -> Unit) {
 @Composable
 private fun LockScreen(
     biometricAvailable: Boolean,
+    faceBiometricAvailable: Boolean,
+    faceUnlockEnabled: Boolean,
     verifyPin: (String) -> Boolean,
     requestBiometric: () -> Unit,
+    requestFaceBiometric: () -> Unit,
     onUnlocked: () -> Unit
 ) {
     var pin by rememberSaveable { mutableStateOf("") }
@@ -180,10 +193,16 @@ private fun LockScreen(
             },
             modifier = Modifier.fillMaxWidth()
         ) { Text("Unlock") }
+        if (faceUnlockEnabled && faceBiometricAvailable) {
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(onClick = requestFaceBiometric, modifier = Modifier.fillMaxWidth()) {
+                Text("Use face or fingerprint")
+            }
+        }
         if (biometricAvailable) {
             Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = requestBiometric, modifier = Modifier.fillMaxWidth()) {
-                Text("Use biometric / device credential")
+                Text("Use strong biometric / device credential")
             }
         }
     }
@@ -310,7 +329,10 @@ private fun MainShell(
     onThemeModeChange: (ThemeMode) -> Unit,
     verifyPin: (String) -> Boolean,
     biometricAvailable: Boolean,
-    requestBiometric: (() -> Unit) -> Unit
+    faceBiometricAvailable: Boolean,
+    faceUnlockEnabled: Boolean,
+    requestBiometric: (() -> Unit) -> Unit,
+    onFaceUnlockEnabledChange: (Boolean) -> Unit
 ) {
     val context = LocalContext.current
     val repository = remember {
@@ -590,6 +612,10 @@ private fun MainShell(
                     },
                     themeMode = themeMode,
                     onThemeModeChange = onThemeModeChange,
+                    verifyPin = verifyPin,
+                    faceBiometricAvailable = faceBiometricAvailable,
+                    faceUnlockEnabled = faceUnlockEnabled,
+                    onFaceUnlockEnabledChange = onFaceUnlockEnabledChange,
                     onBack = { screen = MainScreen.MORE }
                 )
                 MainScreen.MORE -> MoreScreen(
